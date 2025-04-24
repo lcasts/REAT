@@ -71,7 +71,7 @@ Jan-Steffen Fischer and Sebastian Winterhoff and Stefanos Fasoulas, Re-entry Emi
 
 3. **Install DRAMA Python Module**
 
-   - Install DRAMA python module from an existing DRAMA installation. DRAMA is avaialbale under https://sdup.esoc.esa.int/drama/ for download.
+   - Install DRAMA python module from an existing DRAMA installation. DRAMA is available under https://sdup.esoc.esa.int/drama/ for download.
    - Install the python DRAMA module:
      ```bash
      pip install <DRAMA installation directory>/TOOLS/python_package
@@ -147,6 +147,7 @@ Jan-Steffen Fischer and Sebastian Winterhoff and Stefanos Fasoulas, Re-entry Emi
 2. **Emission Calculation**:
    - For PyDrama and OwnDrama runs
       - Emission calculation with either emission factors or NASA CEA TP (if added, can also be changed to HP), defined with either "use_emission_factors" or "use_nasa_cea" set as true
+      - NOx Emission calculation with either Cantera HP or NASA CEA HP (if added), defined with the "nox_method" variable
    - For OwnBallistic and Ballistic trajectories:
       - NOx Emission calculation with either Cantera HP or NASA CEA HP (if added), defined with the "nox_method" variable
 
