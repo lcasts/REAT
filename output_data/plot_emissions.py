@@ -52,7 +52,7 @@ def plot_top5_emissions_per_bin(binned_emissions, save_name):
         plt.barh(top_5_emissions_per_bin.index, top_5_emissions_per_bin[species],
                  color=colors(i), label=species, log=False)
 
-    plt.title('Top 5 Emissions for each 5 km Interval (up to 100 km)')
+    plt.title('Emissions for each 5 km Interval (up to 100 km)')
     plt.xlabel('Emissions [kg]')
     plt.ylabel('Altitude')
     plt.legend(title='Species', bbox_to_anchor=(1.05, 1), loc='upper left')
