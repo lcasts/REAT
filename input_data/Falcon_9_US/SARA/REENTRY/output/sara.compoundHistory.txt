@@ -1,0 +1,34 @@
+#_______________________________________________________________________________
+#    ######   ####     ##             #####   #####     ##    #    #    ##
+#    #       #        #  #            #    #  #    #   #  #   ##  ##   #  #
+#    #####    ####   ######           #    #  #####   ######  # ## #  ######
+#    #            #  #    #           #    #  #    #  #    #  #    #  #    #
+#____######__#####___#____#___________#####___#____#__#____#__#____#__#____#____
+#
+#              ESA Debris Risk Assessment and Mitigation Analysis
+#
+#                         ---- DRAMA ( SESAM r2.1.3 ) ----
+#                                      ESA 2018
+#
+#                         final state of history of the compound  objects
+#-------------------------------------------------------------------------------
+# Filename      : compoundHistory.txt
+# RunID         : sara
+# Content       : This file lists the history of the compound  objects and provides information on the component of each compound until they separate,
+#                 computed by the DRAMA 3 Re-entry Analysis.
+# Documentation : DRAMA Software User Manual, section OPERATIONS MANUAL / Normal operation / SARA / SARA Simulation Output / Re-entry simulation output
+#
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#  CompoundID Time[s] Altitude[km] ObjectName ObjectFinalState
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+8911481094606376936    157.550          79.804
+x x x He_HPV2 - CFRP 
+x x x He_HPV1 - CFRP 
+x x x Electronics - CuAl 
+x x x MerlinVE - A316 
+x x x Structure - AA2198 
+x x x Fluidics - A316 
+x x x Nozzle - CFRP 
+x x x TF - AlTi 
+x x x RP1_Tank - AA2198 
+x x x LOX_Tank - AA2198 
