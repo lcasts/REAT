@@ -50,7 +50,7 @@ Jan-Steffen Fischer and Sebastian Winterhoff and Stefanos Fasoulas, Re-entry Emi
 
    - Create a virtual environment (if not already created):
      ```bash
-     python -m venv venv
+     python -m venv .venv
      ```
    - Activate the virtual environment:
      - On Windows:
@@ -71,7 +71,7 @@ Jan-Steffen Fischer and Sebastian Winterhoff and Stefanos Fasoulas, Re-entry Emi
 
 3. **Install DRAMA Python Module**
 
-   - Install DRAMA python module from an existing DRAMA installation. DRAMA is available under https://sdup.esoc.esa.int/drama/ for download.
+   - Install DRAMA python module from an existing DRAMA installation. DRAMA is avaialbale under https://sdup.esoc.esa.int/drama/ for download.
    - Install the python DRAMA module:
      ```bash
      pip install <DRAMA installation directory>/TOOLS/python_package
@@ -136,18 +136,21 @@ Jan-Steffen Fischer and Sebastian Winterhoff and Stefanos Fasoulas, Re-entry Emi
 1. **Trajectory Calculation**:
 
    - There are multiple options for the trajectories:
-      - OwnBallistic: 
+      - OwnBallistic: Trajectory calculation using an existing ballistic trajectory file.
          - Using an existing ballistic trajectory file. An example is included in the input_data folder.
       - Ballistic: Trajectory calculation of (semi-)ballistic entry trajectories.
       - PyDrama: Trajectory calculation using the python package of DRAMA.
          - Using an existing DRAMA model with the materials.xml and objects.xml
          - Using a generic model to change mass and dimensions within the scenarios.xlsx file
+         - Please make sure to name the systems each with their material seperated with "_-_" (e.g. RP1_Tank_-_AA2198) 
       - OwnDrama: Trajectory calculation based on existing DRAMA files. Please make sure the folder is named as the vehicle.
+         - Please make sure to name the systems each with their material seperated with "_-_" (e.g. RP1_Tank_-_AA2198)
+      - OwnScarab: Trajectory calculation based on existing SCARAB files. Please make sure the folder is named as the vehicle and includes all the fragment folders (1.1, 1.2, 2.1, ...) and output files.
+      - OwnDebrisk: Trajectory calculation based on existing DEBRISK files. Please make sure the folder is named as the vehicle and includes the .dat output file.
 
 2. **Emission Calculation**:
-   - For PyDrama and OwnDrama runs
+   - For PyDrama, OwnDrama, OwnScarab and OwnDebrisk runs
       - Emission calculation with either emission factors or NASA CEA TP (if added, can also be changed to HP), defined with either "use_emission_factors" or "use_nasa_cea" set as true
-      - NOx Emission calculation with either Cantera HP or NASA CEA HP (if added), defined with the "nox_method" variable
    - For OwnBallistic and Ballistic trajectories:
       - NOx Emission calculation with either Cantera HP or NASA CEA HP (if added), defined with the "nox_method" variable
 
@@ -168,4 +171,5 @@ Jan-Steffen Fischer and Sebastian Winterhoff and Stefanos Fasoulas, Re-entry Emi
 
 - **Jan-Steffen Fischer** - [lcasts](https://github.com/lcasts)
 - **Sebastian Winterhoff** - [SWinterhoff](https://github.com/SWinterhoff)
+- **Felix Dorn**
 - **Stefanos Fasoulas**
