@@ -60,11 +60,25 @@ def create_inp_file(filename, df=None, *args):
     # Include Fuel and Air Species
     line += "react \n"
     for fuel, mass_fraction in material_species.items():
+        if fuel == "AL(cr)" and t_material > 933.61:
+            fuel = "AL(L)"
         if fuel == "Zn(cr)" and t_material > 692.73:
             fuel = "Zn(L)"
+        elif fuel == "Li(cr)" and t_material > 453.69:
+            fuel = "Li(L)"
+        elif fuel == "Ag(cr)" and t_material > 1235.08:
+            fuel = "Ag(L)"
         elif fuel == "Sn(cr)" and t_material > 505.12:
             fuel = "Sn(L)"
-        elif fuel == "Mn(a)" and t_material > 980.00:
+        elif fuel == "Mg(cr)" and t_material > 923.00:
+            fuel = "Mg(L)"
+        elif fuel == "Mn(a)" and t_material >= 980.00 and t_material < 1361.00:
+            fuel = "Mn(b)"
+        elif fuel == "Mn(a)" and t_material >= 1361.00 and t_material < 1412.00:
+            fuel = "Mn(c)"
+        elif fuel == "Mn(a)" and t_material >= 1412.00 and t_material < 1519.00:
+            fuel = "Mn(d)"
+        elif fuel == "Mn(a)" and t_material >= 1519.00:
             fuel = "Mn(L)"
         elif fuel == "Fe(a)" and t_material >= 1184.00 and t_material < 1665.00:
             fuel = "Fe(c)"
@@ -159,18 +173,16 @@ def init_directory():
 
 # Save files to output data as backup
 def save_files(filename):
-    filetype_to_move = [".inp", ".out", ".csv", ".plt"]
-    for filetype in filetype_to_move:
+    filetypes_to_delete = [".inp", ".out", ".csv", ".plt"]
+    for filetype in filetypes_to_delete:
         try:
-            folder = output_data_folder_path_raw
-            new_filename = f"{filename}"
-            # Adding (counter) and filetype to new_filename
-            new_filename, file_path = get_unique_filename(new_filename, folder, filetype)
-            # Renaming raw data file and moving it to storage folder
-            os.rename(filename + filetype, new_filename)
-            shutil.move(new_filename, os.path.join(folder, new_filename))
+            file_path = filename + filetype
+            os.remove(file_path)
+            #print(f"Deleted: {file_path}")
         except FileNotFoundError:
             pass
+        except Exception as e:
+            print(f"Error deleting {file_path}: {e}")
 
 # Save formated Results to Excel
 def save_results_excel(filename, df_output):
@@ -195,7 +207,7 @@ def clean_directory(filename):
 # Delete NASA CEA init files
 def clean_up():
     # Remove thermo.lib & trans.lib
-    files_to_remove = ["thermo.lib", "trans.lib"]
+    files_to_remove = ["thermo.lib", "trans.lib", ".inp", ".out", ".plt"]
     for file in files_to_remove:
         try:
             os.remove(file)
@@ -262,6 +274,15 @@ def readCEA(filename):
         mass_fractions_df = pd.DataFrame(columns=['exit'])
         
         for item in cleaned_lines:
+
+            if '******' in item[1]:
+                item[1] = item[1].replace('******', '1.00')
+                print(f"CEA error workaround: Replaced '******' with '1.00' in item: {item}")
+
+            if '*****' in item[1]:
+                item[1] = item[1].replace('*****', '1.00')
+                print(f"CEA error workaround: Replaced '*****' with '1.00' in item: {item}")
+
             parts = item[1].split('-') if '-' in item[1] else item[1].split('+')
             result = float(parts[0]) * 10**(-int(parts[1])) if '-' in item[1] else float(parts[0]) * 10**(int(parts[1]))
             new_df = pd.DataFrame({'exit': result}, index=[item[0]])
@@ -513,6 +534,145 @@ def emission_factors(df_trajaerodata, df_emission_factors, scenario_name):
     except Exception as e:
         handle_error(e, "emission_factors", "Error in Emission Factors main function.")
 
+# Emission factor calculation for scarab input with multiple materials per row
+def emission_factors_scarab(df_trajaerodata, df_emission_factors, scenario_name):
+    try:
+        init_directory()
+        emission_results = df_trajaerodata
+
+        # --- filter rows for scenario; keep only rows with any per-material d_m > 0
+        # detect per-material massflow columns like: 'd_m AA7075 [kg]'
+        dm_pattern = re.compile(r'^d_m\s+(?P<mat>.+?)\s+\[kg\]$')
+        dm_cols = [c for c in emission_results.columns if dm_pattern.match(c)]
+
+        if not dm_cols:
+            print("No per-material massflow columns found (expected columns like 'd_m AA7075 [kg]').")
+
+        scenario_mask = (emission_results['scenario'] == scenario_name) if 'scenario' in emission_results.columns else True
+        any_dm_positive = emission_results[dm_cols].fillna(0).gt(0).any(axis=1) if dm_cols else False
+        if isinstance(scenario_mask, bool):
+            filtered_rows = emission_results.copy()
+        else:
+            filtered_rows = emission_results[scenario_mask].copy()
+
+        if isinstance(any_dm_positive, pd.Series):
+            filtered_rows = filtered_rows.loc[any_dm_positive.reindex(filtered_rows.index, fill_value=False)]
+
+        total_emissions = pd.DataFrame()
+
+        # parse altitude_interval
+        df_emission_factors = df_emission_factors.copy()
+        df_emission_factors['altitude_interval'] = df_emission_factors['altitude_interval'].apply(
+            lambda x: [float(i) for i in literal_eval(x)] if isinstance(x, str) else x
+        )
+
+        # meta/species columns
+        meta_cols = [c for c in ['material', 'method', 'altitude_interval'] if c in df_emission_factors.columns]
+        species_cols = [c for c in df_emission_factors.columns if c not in meta_cols]
+        df_emission_factors[species_cols] = df_emission_factors[species_cols].apply(pd.to_numeric, errors='coerce').fillna(0.0)
+
+        # group EF by material for faster access
+        ef_by_material = {m: g.reset_index(drop=True) for m, g in df_emission_factors.groupby('material', dropna=False)}
+
+        # --- iterate filtered rows
+        for idx, row in filtered_rows.iterrows():
+            altitude = row['Altitude [km]']
+
+            # accumulate per-species totals across materials for this row
+            row_species_totals = {}
+
+            for dm_col in dm_cols:
+                mat_name = dm_pattern.match(dm_col).group('mat')
+                try:
+                    massflow = float(row.get(dm_col, 0.0))
+                except Exception:
+                    massflow = 0.0
+                if massflow <= 0:
+                    continue
+
+                # emission factors for this material
+                ef_tbl = ef_by_material.get(mat_name)
+                if ef_tbl is None or ef_tbl.empty:
+                    print(f"No emission factors for material '{mat_name}'.")
+                    continue
+
+                # altitude interval match
+                altitude_interval_match = ef_tbl[
+                    ef_tbl['altitude_interval'].apply(
+                        lambda x: x[0] <= altitude <= x[1] if isinstance(x, (list, tuple)) and len(x) == 2 else False
+                    )
+                ]
+                if altitude_interval_match.empty:
+                    print(f"No matching emission factors for altitude {altitude} and material {mat_name}")
+                    continue
+
+                emission_factors_row = altitude_interval_match.iloc[0]
+
+                # numeric EI series
+                ei_series = emission_factors_row[species_cols].astype(float).fillna(0.0)
+
+                # optional thresholding (uses global 'threshold' if you defined it elsewhere)
+                try:
+                    thr = float(threshold)
+                except Exception:
+                    thr = 0.0
+                if thr > 0:
+                    ei_series = ei_series.where(ei_series > thr, other=0.0)
+
+                # optional Black Carbon addition (uses global 'calculate_black_carbon' and 'BC_prim' if present)
+                try:
+                    use_bc = bool(calculate_black_carbon)
+                except Exception:
+                    use_bc = False
+                if use_bc and 'BC_prim' in ef_tbl.columns:
+                    bc_val = float(emission_factors_row.get('BC_prim', 0.0) or 0.0)
+                    if 'BC' in ei_series.index:
+                        ei_series.loc['BC'] = ei_series.loc['BC'] + bc_val
+                    else:
+                        ei_series.loc['BC'] = bc_val
+
+                # convert EI to emitted mass for this material at this timestep
+                emitted = (ei_series * massflow).to_dict()
+
+                # accumulate into row totals
+                for sp, val in emitted.items():
+                    if pd.isna(val) or val == 0:
+                        continue
+                    row_species_totals[sp] = row_species_totals.get(sp, 0.0) + float(val)
+
+            # if anything was computed, append to total_emissions in "long" form (like original)
+            if row_species_totals:
+                combined_species = pd.DataFrame(
+                    {'species': list(row_species_totals.keys()),
+                     'EI_species': list(row_species_totals.values())}
+                )
+                combined_species['row_idx'] = idx
+                total_emissions = pd.concat([total_emissions, combined_species], ignore_index=True)
+
+        # pivot to wide species columns
+        if not total_emissions.empty:
+            pivot_emissions = total_emissions.pivot(index='row_idx', columns='species', values='EI_species').fillna(0)
+            emission_results = filtered_rows.merge(pivot_emissions, left_index=True, right_index=True, how='left')
+        else:
+            emission_results = filtered_rows.copy()
+
+        # final cleanup and output
+        emission_results = emission_results.drop(columns=['*Ar', '*He'], errors='ignore')
+        print("Emission index calculation completed successfully.")
+
+        return emission_results
+
+    except Exception as e:
+        handle_error(e, "emission_factors", "Error in Emission Factors main function.")
+        # re-raise if you want callers to notice
+        # raise
+    finally:
+        # Clean up temporary files regardless of success/failure
+        try:
+            clean_up()
+        except Exception:
+            pass
+
 #### NASA CEA Emissions - Main Function
 def run_nasa_cea(df_trajaerodata, df_emission_factors, df_material_data, scenario_name):
     try:
@@ -579,7 +739,7 @@ def run_nasa_cea(df_trajaerodata, df_emission_factors, df_material_data, scenari
                             # Saving raw and formated data
                             save_files(afterburning_filename)
                             # Save results
-                            save_results_excel(afterburning_filename, df_output)
+                            #save_results_excel(afterburning_filename, df_output)
 
                             # Filter and process emissions data
                             df_output_filtered = df_output.iloc[6:]
@@ -763,7 +923,7 @@ def run_nasa_cea(df_trajaerodata, df_emission_factors, df_material_data, scenari
                 # Saving raw and formated data
                 df_output = readCEA(output_file_path)
                 save_files(afterburning_filename)
-                save_results_excel(afterburning_filename, df_output)
+                #save_results_excel(afterburning_filename, df_output)
                 
                 df_output_filtered = df_output.iloc[6:]
                 df_output_filtered.columns = ['ab_output_filtered']
@@ -795,13 +955,65 @@ def run_nasa_cea(df_trajaerodata, df_emission_factors, df_material_data, scenari
                 clean_directory(afterburning_filename)
             
             except Exception as e:
-                print(f"NASA CEA error: {e} at time {time}s and temperature {t_air}. Setting emissions fractions to 0")
-                emission_species = pd.DataFrame({
-                                'CO': [0],
-                                'CO2': [0],
-                                'NO': [0],
-                                'H2O': [0]
-                            })
+                print(f"NASA CEA error: {e} at time {time}s and temperature {t_air}. Calculating emissions with stoichiometric factors.")
+            
+                df_emission_factors['altitude_interval'] = df_emission_factors['altitude_interval'].apply(
+                    lambda x: [float(i) for i in literal_eval(x)] if isinstance(x, str) else x
+                )
+                
+                # Filter emission factors for the current material
+                df_emission_factor_material = df_emission_factors[
+                    df_emission_factors['material'] == row['Material']
+                ]
+                print(f"Using emission factors for material {row['Material']} at altitude {row['Altitude [km]']}")
+
+                # Further filter by altitude interval
+                altitude_interval_match = df_emission_factor_material[
+                    df_emission_factor_material['altitude_interval'].apply(
+                        lambda x: x[0] <= row['Altitude [km]'] <= x[1] if isinstance(x, list) else False
+                    )
+                ]
+                
+                # Skip if no matching altitude interval
+                if altitude_interval_match.empty:
+                    print(f"No matching emission factors for altitude {row['Altitude [km]']} and material {row['Material']}")
+                
+                # Select the first matching row of emission factors
+                emission_factors_row = altitude_interval_match.iloc[0]
+
+                # Calculate emissions for each species based on emission factors
+                df_emission_factor_material_numeric = emission_factors_row.drop(
+                    ['material', 'method', 'altitude_interval']
+                ).astype(float)
+
+                df_species_mass = df_emission_factor_material_numeric
+                df_species_mass = df_species_mass.fillna(0)
+
+                # Initialize a DataFrame to store species and their EI_species for the current row
+                combined_species = pd.DataFrame(columns=['species', 'EI_species'])
+                # Append calculated species emissions to combined_species
+                for species, mass in df_species_mass.items():
+                    if mass > threshold:
+                        combined_species = pd.concat(
+                            [combined_species, pd.DataFrame({'species': [species], 'EI_species': [mass]})],
+                            ignore_index=True
+                        )
+
+                # Update Black Carbon Emissions
+                if calculate_black_carbon:
+                    fuel_type = row['Material']
+                    primary_bc = df_emission_factors[df_emission_factors['material'] == fuel_type].iloc[0]['BC_prim']
+                    final_bc = primary_bc  # Additional calculations can be added if needed
+                    combined_species = pd.concat(
+                        [combined_species, pd.DataFrame({'species': ['BC'], 'EI_species': [final_bc]})],
+                        ignore_index=True
+                    )
+
+                # Multiply EI_species by massflow and store in total_emissions
+                combined_species['EI_species'] *= massflow
+                combined_species['row_idx'] = idx  # Add row index to identify each row's results
+                total_emissions = pd.concat([total_emissions, combined_species], ignore_index=True)
+                continue
 
         # Pivot total_emissions to have species as columns and rows identified by row_idx
         total_emissions = total_emissions.pivot(index='row_idx', columns='species', values='EI_species').fillna(0)
@@ -831,6 +1043,374 @@ def run_nasa_cea(df_trajaerodata, df_emission_factors, df_material_data, scenari
         
     except Exception as e:
         handle_error(e, "run_nasa_cea", "Error in NASA CEA main function.")
+
+def run_nasa_cea_scarab(df_trajaerodata, df_emission_factors, df_material_data, scenario_name):
+    try:
+        # Initialize results
+        init_directory()
+        emission_results = df_trajaerodata
+
+        # --- detect per-material massflow columns (e.g., 'd_m AA7075 [kg]')
+        dm_pattern = re.compile(r'^d_m\s+(?P<mat>.+?)\s+\[kg\]$')
+        dm_cols = [c for c in emission_results.columns if dm_pattern.match(c)]
+
+        # --- Filter rows for the given scenario
+        filtered_rows_all = emission_results[(emission_results['scenario'] == scenario_name)]
+        if not dm_cols:
+            # fall back to legacy column if present, else no massflow filtering
+            legacy_mask = (filtered_rows_all['d_m [kg]'] > 0) if 'd_m [kg]' in filtered_rows_all.columns else True
+            filtered_rows = filtered_rows_all[legacy_mask].copy()
+        else:
+            any_dm_positive = emission_results[dm_cols].fillna(0).gt(0).any(axis=1)
+            filtered_rows = filtered_rows_all.loc[any_dm_positive.reindex(filtered_rows_all.index, fill_value=False)].copy()
+
+        total_emissions = pd.DataFrame()
+
+        # =========================
+        # 1) NOx CALCULATION (unchanged, material-agnostic)
+        # =========================
+        if calculate_nox == True:
+            total_nox_emissions = pd.DataFrame()
+
+            if nox_method == "nasa_cea":
+                for idx, row in filtered_rows_all.iterrows():
+                    # Initialise atmospheric conditions and massflow
+                    rho_atm, t_atm, p_atm, c_atm, df_air_massfractions, df_atm_molarfractions = calculate_atmosphere_data(row)
+                    p_atm = p_atm*10**(-5)  # Pa -> bar
+                    velocity = row['Velocity [km/s]']*1000
+                    a_ref = row['ReferenceArea [m^2]']
+                    time = row['Time [s]']
+                    try:
+                        time_old
+                    except NameError:
+                        time_old = time - 1
+                    massflow = rho_atm * velocity * ((a_ref * rof_f) - a_ref) * (time - time_old)
+                    time_old = time
+                    t_air = shockwave_temperature(t_atm, velocity, c_atm)
+                    t_atm = max(160.1, t_atm)
+                    t_ab = min(23999, t_air)
+
+                    if t_ab > 1000:
+                        afterburning_filename = f"{scenario_name}_nox_{int(time)}"
+                        create_inp_file_bal(afterburning_filename, None, t_ab, p_atm, rho_atm, None, t_atm, df_air_massfractions)
+                        try:
+                            process = subprocess.Popen(
+                                [nasa_cea_folder_path + nasa_cea_exe],
+                                stdin=subprocess.PIPE,
+                                stdout=subprocess.DEVNULL,
+                                stderr=subprocess.PIPE
+                            )
+                            process.stdin.write(f"{afterburning_filename}\n".encode())
+                            process.stdin.close()
+                            process.wait()
+
+                            if process.returncode != 0:
+                                error_message = process.stderr.read().decode()
+                                print("Error while executing NASA CEA:", error_message)
+                                continue
+
+                            df_output = readCEA(afterburning_filename)
+                            save_files(afterburning_filename)
+
+                            df_output_filtered = df_output.iloc[6:]
+                            df_output_filtered.columns = ['ab_output_filtered']
+                            df_output_filtered.index = df_output_filtered.index.str.replace(r'^\*', '', regex=True)
+
+                            df_air_massfractions = df_air_massfractions.transpose()
+                            df_air_massfractions.columns = ['air_massfractions']
+                            df_air_massfractions.index = df_air_massfractions.index.str_replace(r'^\*', '', regex=True)
+
+                            combined_df = pd.concat([df_output_filtered, df_air_massfractions], axis=1, join='outer').fillna(0)
+
+                            emission_species_nox = pd.DataFrame(columns=['species', 'EI_species'])
+                            for species, row2 in combined_df.iterrows():
+                                x_species = smart_round(row2['ab_output_filtered'])
+                                x_species_atm = smart_round(row2['air_massfractions'])
+                                EI_species = x_species - x_species_atm
+                                if EI_species > threshold:
+                                    emission_species_nox = pd.concat(
+                                        [emission_species_nox,
+                                         pd.DataFrame({'species': [species], 'EI_species': [EI_species]})],
+                                        ignore_index=True
+                                    )
+                        except Exception as e:
+                            print(f"NASA CEA error: {e} at time {time}s and temperature {t_ab}. Setting NOx fractions to 0")
+                            emission_species_nox = pd.DataFrame({'species': ['NO', 'NO2'], 'EI_species': [0.0, 0.0]})
+
+                        # Multiply EI_species by massflow and store
+                        emission_species_nox['EI_species'] *= massflow
+                        emission_species_nox['row_idx'] = idx
+                        total_nox_emissions = pd.concat([total_nox_emissions, emission_species_nox], ignore_index=True)
+
+                total_nox_emissions = total_nox_emissions.pivot_table(
+                    index='row_idx', columns='species', values='EI_species', aggfunc='sum', fill_value=0
+                )
+                cols_to_keep = [col for col in ['NO', 'NO2'] if col in total_nox_emissions.columns]
+                total_nox_emissions = total_nox_emissions[cols_to_keep]
+
+            if nox_method == "cantera":
+                for idx, row in filtered_rows_all.iterrows():
+                    rho_atm, t_atm, p_atm, c_atm, df_air_massfractions, df_atm_molarfractions = calculate_atmosphere_data(row)
+                    p_atm = p_atm*10**(-5)
+                    velocity = row['Velocity [km/s]']*1000
+                    a_ref = row['ReferenceArea [m^2]']
+                    time = row['Time [s]']
+                    try:
+                        time_old
+                    except NameError:
+                        time_old = time - 1
+                    massflow = rho_atm * velocity * ((a_ref * rof_f) - a_ref) * (time - time_old)
+                    time_old = time
+                    t_air = shockwave_temperature(t_atm, velocity, c_atm)
+                    t_air = max(160.1, t_air)
+                    t_ab = min(10000, t_air)
+                    if t_ab > 1000:
+                        gas = ct.Solution('gri30.yaml')
+
+                        atm_composition = {
+                            'N2': float(df_atm_molarfractions.get('N2', 0)),
+                            'O2': float(df_atm_molarfractions.get('O2', 0)),
+                            'O':  float(df_atm_molarfractions.get('O', 0)),
+                            'N':  float(df_atm_molarfractions.get('N', 0)),
+                            'NO': float(df_atm_molarfractions.get('NO', 0)),
+                            'Ar': float(df_atm_molarfractions.get('Ar', 0)),
+                        }
+                        total_moles = sum(atm_composition.values())
+                        if total_moles > 0:
+                            atm_composition = {k: v/total_moles for k, v in atm_composition.items()}
+
+                        try:
+                            gas.TPX = t_ab, p_atm, atm_composition
+                            gas.equilibrate('HP')
+                            no_mass_fraction = gas['NO'].Y[0]
+                            no2_mass_fraction = gas['NO2'].Y[0]
+                        except ct.CanteraError as e:
+                            print(f"Cantera error: {e} at time {time}s and temperature {t_ab}. Setting NOx fractions to 0")
+                            no_mass_fraction = 0.0
+                            no2_mass_fraction = 0.0
+
+                        no_emission_rate = (no_mass_fraction - df_air_massfractions['NO'].values[0]) * massflow
+                        no2_emission_rate = no2_mass_fraction * massflow
+
+                        emission_species_nox = pd.DataFrame([
+                            {'species': 'NO', 'EI_species': no_emission_rate},
+                            {'species': 'NO2', 'EI_species': no2_emission_rate}
+                        ])
+                        emission_species_nox['row_idx'] = idx
+                        total_nox_emissions = pd.concat([total_nox_emissions, emission_species_nox], ignore_index=True)
+
+                total_nox_emissions = total_nox_emissions.pivot_table(
+                    index='row_idx', columns='species', values='EI_species', aggfunc='sum', fill_value=0
+                )
+                cols_to_keep = [col for col in ['NO', 'NO2'] if col in total_nox_emissions.columns]
+                total_nox_emissions = total_nox_emissions[cols_to_keep]
+
+        # =========================
+        # 2) CEA AFTERBURNING PER MATERIAL (THIS IS THE NEW PART)
+        # =========================
+        # Prepare EF fallback table
+        df_emission_factors = df_emission_factors.copy()
+        if 'altitude_interval' in df_emission_factors.columns:
+            df_emission_factors['altitude_interval'] = df_emission_factors['altitude_interval'].apply(
+                lambda x: [float(i) for i in literal_eval(x)] if isinstance(x, str) else x
+            )
+        meta_cols = [c for c in ['material', 'method', 'altitude_interval'] if c in df_emission_factors.columns]
+        species_cols = [c for c in df_emission_factors.columns if c not in meta_cols]
+        if species_cols:
+            df_emission_factors[species_cols] = df_emission_factors[species_cols].apply(pd.to_numeric, errors='coerce').fillna(0.0)
+
+        for idx, row in filtered_rows.iterrows():
+            # Atmospheric Data (row-level, same for all materials in this timestep)
+            rho_atm, t_atm, p_atm, c_atm, df_air_massfractions, df_atm_molarfractions = calculate_atmosphere_data(row)
+            p_atm = p_atm*10**(-5)  # Pa -> bar
+            velocity = row['Velocity [km/s]']*1000
+            a_ref = row['ReferenceArea [m^2]']
+            time = row['Time [s]']
+
+            # iterate each material present in this row
+            for dm_col in dm_cols if dm_cols else ['d_m [kg]']:
+                # Determine material name and massflow for this column
+                if dm_col == 'd_m [kg]':
+                    mat_name = row.get('Material', 'Unknown')
+                else:
+                    mat_name = dm_pattern.match(dm_col).group('mat')
+
+                try:
+                    massflow = float(row.get(dm_col, 0.0))
+                except Exception:
+                    massflow = 0.0
+                if massflow <= 0:
+                    continue  # skip materials with zero massflow
+
+                # rof_ab depends on massflow of THIS material
+                rof_ab = rof_ab_calc(rof_f, a_ref, massflow, rho_atm, velocity)
+
+                # Material Data (for THIS material)
+                df_material_massfractions = get_material_data(mat_name, df_material_data)
+
+                # Apply threshold to material species
+                df_material_massfractions = df_material_massfractions.loc[
+                    :, df_material_massfractions.iloc[0] > threshold
+                ]
+
+                # Build afterburning case (per material)
+                t_mat = row['Temp [K]']
+                t_air = shockwave_temperature(t_atm, velocity, c_atm)   # Heating of air due to shockwave
+                p_air = stagnation_point_pressure(p_atm, rho_atm, velocity)
+
+                obj_name = row.get('ObjectName', row.get('FragmentID', 'Object'))
+                safe_mat = str(mat_name).replace(' ', '_')
+                afterburning_filename = f"{scenario_name}_{obj_name}_{safe_mat}_{int(time)}"
+
+                create_inp_file(
+                    afterburning_filename,
+                    None,
+                    t_atm,
+                    p_atm,
+                    rho_atm,
+                    None,
+                    t_mat,
+                    t_air,
+                    p_air,
+                    rof_ab,
+                    df_material_massfractions,
+                    df_air_massfractions
+                )
+                input_file_path = str(afterburning_filename)
+                output_file_path = str(afterburning_filename)
+
+                try:
+                    # Execute CEA for THIS material
+                    process = subprocess.Popen(
+                        [nasa_cea_folder_path + nasa_cea_exe],
+                        stdin=subprocess.PIPE,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.PIPE
+                    )
+                    process.stdin.write(f"{input_file_path}\n".encode())
+                    process.stdin.close()
+                    process.wait()
+
+                    if process.returncode != 0:
+                        error_message = process.stderr.read().decode()
+                        print("Error while executing NASA CEA:", error_message)
+                    # Read & save
+                    df_output = readCEA(output_file_path)
+                    save_files(afterburning_filename)
+
+                    df_output_filtered = df_output.iloc[6:]
+                    df_output_filtered.columns = ['ab_output_filtered']
+                    df_output_filtered.index = df_output_filtered.index.str.replace(r'^\*', '', regex=True)
+
+                    df_air_mf = df_air_massfractions.transpose()
+                    df_air_mf.columns = ['air_massfractions']
+                    df_air_mf.index = df_air_mf.index.str.replace(r'^\*', '', regex=True)
+
+                    combined_df = pd.concat([df_output_filtered, df_air_mf], axis=1, join='outer').fillna(0)
+
+                    # Per-material EI
+                    combined_species = pd.DataFrame(columns=['species', 'EI_species'])
+                    for species, row2 in combined_df.iterrows():
+                        x_species = row2['ab_output_filtered']
+                        x_species_atm = row2['air_massfractions']
+                        EI_species = (x_species * (rof_ab + 1)) - (x_species_atm * rof_ab)
+                        if EI_species > threshold:
+                            combined_species = pd.concat(
+                                [combined_species, pd.DataFrame({'species': [species], 'EI_species': [EI_species]})],
+                                ignore_index=True
+                            )
+
+                    # Multiply EI by this material's massflow and append
+                    combined_species['EI_species'] *= massflow
+                    combined_species['row_idx'] = idx
+                    total_emissions = pd.concat([total_emissions, combined_species], ignore_index=True)
+
+                    # Clean up CEA files for this material
+                    clean_directory(afterburning_filename)
+
+                except Exception as e:
+                    # Fallback: stoichiometric EF for THIS material
+                    print(f"NASA CEA error: {e} at time {time}s and material {mat_name}. Using stoichiometric emission factors.")
+                    if 'altitude_interval' in df_emission_factors.columns:
+                        df_emission_factor_material = df_emission_factors[df_emission_factors['material'] == mat_name]
+                        print(f"Using emission factors for material {mat_name} at altitude {row['Altitude [km]']}")
+
+                        altitude_interval_match = df_emission_factor_material[
+                            df_emission_factor_material['altitude_interval'].apply(
+                                lambda x: x[0] <= row['Altitude [km]'] <= x[1] if isinstance(x, list) else False
+                            )
+                        ]
+
+                        if altitude_interval_match.empty:
+                            print(f"No matching emission factors for altitude {row['Altitude [km]']} and material {mat_name}")
+                            continue
+
+                        emission_factors_row = altitude_interval_match.iloc[0]
+                        df_ei = emission_factors_row.drop(
+                            [c for c in ['material', 'method', 'altitude_interval'] if c in emission_factors_row.index]
+                        ).astype(float).fillna(0)
+
+                        combined_species = pd.DataFrame(columns=['species', 'EI_species'])
+                        for species, mass in df_ei.items():
+                            if mass > threshold:
+                                combined_species = pd.concat(
+                                    [combined_species, pd.DataFrame({'species': [species], 'EI_species': [mass]})],
+                                    ignore_index=True
+                                )
+
+                        # Optional BC addition
+                        if 'calculate_black_carbon' in globals() and calculate_black_carbon and 'BC_prim' in df_emission_factors.columns:
+                            try:
+                                primary_bc = df_emission_factors[df_emission_factors['material'] == mat_name].iloc[0]['BC_prim']
+                                combined_species = pd.concat(
+                                    [combined_species, pd.DataFrame({'species': ['BC'], 'EI_species': [primary_bc]})],
+                                    ignore_index=True
+                                )
+                            except Exception:
+                                pass
+
+                        combined_species['EI_species'] *= massflow
+                        combined_species['row_idx'] = idx
+                        total_emissions = pd.concat([total_emissions, combined_species], ignore_index=True)
+                        continue
+
+        # =========================
+        # 3) Pivot & combine totals
+        # =========================
+        # Sum across materials per row/species
+        total_emissions = total_emissions.pivot_table(
+            index='row_idx', columns='species', values='EI_species', aggfunc='sum', fill_value=0
+        )
+
+        if calculate_nox == True:
+            combined_emissions = pd.concat([total_emissions, total_nox_emissions], axis=1)
+        else:
+            combined_emissions = total_emissions
+
+        # If some columns are duplicated (like 'NO'), combine them by summing
+        combined_emissions = combined_emissions.groupby(level=0, axis=1).sum()
+
+        # Merge back to all scenario rows
+        emission_results = filtered_rows_all.merge(combined_emissions, left_index=True, right_index=True, how='left')
+
+        # Drop rows where all added species are zero (keep original cols)
+        added_cols = [c for c in emission_results.columns if c not in df_trajaerodata.columns]
+        if added_cols:
+            nonzero_mask = (emission_results[added_cols].fillna(0) != 0).any(axis=1)
+            emission_results = emission_results[nonzero_mask | (~nonzero_mask)]  # keep all if you prefer; else just use nonzero_mask
+
+        # Final cleanup and output
+        emission_results = emission_results.drop(columns=['Ar', 'He'], errors='ignore')
+        print("NASA CEA calculations completed successfully.")
+
+        # Remove thermo.lib and trans.lib (and any other temp artifacts)
+        clean_up()
+
+        return emission_results
+
+    except Exception as e:
+        handle_error(e, "run_nasa_cea", "Error in NASA CEA main function.")
+
 
 #### NASA CEA NOx ballistic emissions - Main Function
 def run_nasa_cea_bal(df_trajaerodata, df_scenarios, scenario_name):
@@ -891,7 +1471,7 @@ def run_nasa_cea_bal(df_trajaerodata, df_scenarios, scenario_name):
             # Saving raw and formated data
             save_files(afterburning_filename)
             # Save results
-            save_results_excel(afterburning_filename, df_output)
+            #save_results_excel(afterburning_filename, df_output)
 
             # Filter and process emissions data
             df_output_filtered = df_output.iloc[6:]

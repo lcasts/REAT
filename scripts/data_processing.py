@@ -6,8 +6,11 @@ import os
 import re
 import pandas as pd
 import sys
+import numpy as np
 from pymsis import msis
+from io import StringIO
 from datetime import datetime, timedelta
+from tqdm import tqdm
 
 #region: Input Data Generation
 # Import all required data based on user input and config
@@ -19,6 +22,11 @@ def get_input_data():
         s_path = os.path.join(input_data_folder_path, file_name_scenarios)
         df_scenarios = pd.read_excel(s_path, index_col=0, sheet_name=sheet_name_scenarios)
         df_scenarios.drop('note', axis=1, inplace=True)
+        missing_scenarios = [s for s in user_defined_scenarios if s not in df_scenarios.index]
+
+        if missing_scenarios:
+            print(f"Warning: The following scenarios are not in the scenarios.xlsx file and will be ignored: {missing_scenarios}")
+
         # 1.2) Filter Scenarios
         if all_scenarios:
             pass
@@ -27,7 +35,7 @@ def get_input_data():
 
         #2) Import Emission Factors
         df_emission_factors = pd.DataFrame()
-        if use_emission_factors or (use_nasa_cea and calculate_black_carbon):
+        if use_emission_factors or use_nasa_cea:
             ef_path = os.path.join(input_data_folder_path, file_name_emission_factors)
             df_emission_factors = pd.read_excel(ef_path, index_col=None, sheet_name=sheet_name_emission_factors)
             df_emission_factors = df_emission_factors.fillna(0)
@@ -112,11 +120,317 @@ def drama_input(df_scenarios,scenario_name, pydrama_results_folder=None):
     # 3) Combine All Results into a Single DataFrame
     if result_list:
         df_trajaerodata = pd.concat(result_list, ignore_index=True)
-        df_trajaerodata.to_csv(f"output_data/trajectory/traj_drama_merged_trajectory_aerothermal_{scenario_name}.csv", index=False)
+        df_trajaerodata.to_csv(f"output_data/trajectory/TRAJ_RAW_{scenario_name}.csv", index=False)
         return df_trajaerodata
     else:
         df_trajaerodata = pd.DataFrame()
         print("No valid results were generated.")
+
+# Import Scarab Files
+def scarab_input(df_scenarios, scenario_name):
+    # locate simulation data according to config.py and scenarios.xlsx (file_name_scenarios)
+    reentry_vehicle = df_scenarios.loc[scenario_name, 'reentry_vehicle']
+    scenario_folder_path = os.path.join(input_data_folder_path, scenario_name)
+
+    if not os.path.exists(scenario_folder_path):
+        print(colors.BOLD + colors.RED + f"Warning: Scenario folder '{scenario_folder_path}' not found." + colors.END)
+              
+    # import list of fragments, clean data
+    df_frag_list = pd.read_csv(os.path.join(scenario_folder_path, 'frag.lst'), sep='\s+', skiprows=1, 
+                               names=['frag_id', 'frag_description', 'frag_description2', 'parent', 'status', 'child1', 'minus', 'child2'],
+                               dtype={'frag_id': str})      # fragment ID as string to correctly capture fragments with e.g. part x.10 or x.20
+    df_frag_list.loc[df_frag_list['child1'] == 'Impact', 'child1'] = np.nan
+    df_frag_list.loc[df_frag_list['status'] == 'Ground', 'status'] = "Ground Impact"
+    df_frag_list['frag_description'] = df_frag_list['frag_description'] + ' ' + df_frag_list['frag_description2']
+    df_frag_list.drop(columns=['frag_description2'], inplace=True)
+    df_frag_list['children'] = df_frag_list['child1'].astype(str) + df_frag_list['minus'].astype(str) + df_frag_list['child2'].astype(str)
+    df_frag_list.drop(columns=['child1', 'minus', 'child2'], inplace=True)
+    df_frag_list.loc[df_frag_list['children'] == '-nannan', 'children'] = np.nan
+    df_frag_list.loc[df_frag_list['children'] == 'nan-nan', 'children'] = np.nan
+    
+    # import list of materials
+    # df_materials = pd.read_csv(os.path.join(scenario_folder_path, '0.1', 'material.lst'), sep='\s+', names=['material_id', 'material_name'], 
+    #                            skiprows=lambda x: x < 2 or (x - 2) % 17 != 0)
+
+    # initialize dataframe containing data of all fragments
+    df_fragments = pd.DataFrame()
+    
+    # import data for each fragment
+    # iterate through all folders in the folder of the simulation
+    for folder in tqdm(os.listdir(scenario_folder_path), desc="Processing", unit="folder"):         # tqdm to print processing progress in console
+        
+        # filter only the fragment folders
+        if os.path.isdir(os.path.join(scenario_folder_path, folder)):
+            if folder in ['gnuplot', 'latex', 'maps', 'pics']:
+                continue
+            
+            # define file paths
+            fragment_path = os.path.join(scenario_folder_path, folder)
+            masmat_path = os.path.join(fragment_path, 'masmat.hst')
+            mas_path = os.path.join(fragment_path, 'mas.hst')
+            trj_path = os.path.join(fragment_path, 'trj.hst')
+            tqm_path = os.path.join(fragment_path, 'tqm.hst')
+            arshad_path = os.path.join(fragment_path, 'arshad.hst')
+            
+            # import and wrangle masmat data (in masmat.hst)          
+            if os.path.isfile(masmat_path):
+                with open(masmat_path, 'r') as f:
+                    lines = f.readlines()
+                    lines = lines[2:]
+                    lines[0] = lines[0].split('#')[-1]      
+                    if 'cfrp-m56-ud1copper' in lines[0]:    
+                        lines[0] = lines[0].replace("cfrp-m56-ud1copper", "cfrp-m56-ud1 copper")
+                    if 'cc-sic-cerama316' in lines[0]:
+                        lines[0] = lines[0].replace("cc-sic-cerama316", "cc-sic-ceram a316")                        
+                    df_masmat = pd.read_csv(StringIO(''.join(lines)), sep="\s+", header=0)
+                df_masmat.rename(columns={'TIME_[S]': 'TIME[S]'}, inplace=True)
+            else:
+                print('No masmat.hst file found in ', fragment_path)
+            
+            # import and wrangle mas data (in mas.hst)
+            if os.path.isfile(mas_path):
+                df_mas = pd.read_csv(mas_path, skiprows=18, sep="\s+",
+                                     names=['TIME', 'ALT', 'TRK', 'MASS', 'COMX', 'COMY', 'COMZ', 'IXX', 'IYY', 'IZZ', 'IXY', 'IXZ', 'IYZ'])
+                df_mas.rename(columns={'TIME': 'TIME[S]'}, inplace=True)
+                df_mas.rename(columns={'ALT': 'ALT[KM]'}, inplace=True)
+                df_mas.rename(columns={'MASS': 'MASS[KG]'}, inplace=True)
+            else:
+                print('No mas.hst file found in ', fragment_path)
+                
+            # import and wrangle trajectory data (in trj.hst)
+            if os.path.isfile(trj_path):
+                df_trj = pd.read_csv(trj_path, skiprows=28, sep="\s+",
+                                     names=['TIME[S]', 'H[M]', 'LT[DEG]', 'LG[DEG]', 'V[M/S]', 'GM[DEG]', 'PS[DEG]', 'TRK[KM]'])
+                df_trj['H[M]'] = df_trj['H[M]']/1000
+                df_trj.rename(columns={'H[M]': 'ALT[KM]'}, inplace=True)
+            else:
+                print('No trj.hst file found in ', fragment_path)
+            
+            # import and wrangle temperature and heat flux data (in tqm.hst)
+            if os.path.isfile(tqm_path):
+                df_tqm = pd.read_csv(tqm_path, skiprows=3, sep="\s+", 
+                                     names=['TIME[S]', 'ALT[KM]', 'DST[KM]', 'T_MAX[K]', 'Q_MAX[W/M2]', 'Q_AVG[W/M2]', 'Q_SUM[W]', 'Q_TOT[J]',
+                                            'unknown1', 'unknown2', 'unknown3', 'unknown4'])
+                df_tqm = df_tqm[['TIME[S]', 'ALT[KM]', 'DST[KM]', 'T_MAX[K]', 'Q_MAX[W/M2]', 'Q_AVG[W/M2]', 'Q_SUM[W]', 'Q_TOT[J]']]
+                df_tqm.rename(columns={'DST[KM]': 'TRK[KM]'}, inplace=True)
+            else:
+                print('No tqm.hst file found in ', fragment_path)
+                
+            # import and wrangle data containing information about the projected surface area in the direction of flight (in arshad.hst)
+            if os.path.isfile(arshad_path):
+                df_area = pd.read_csv(arshad_path, sep="\s+",
+                                     names=['TIME[S]', 'UNKNOWN', 'PROJ_AREA[M^2]'])
+            else:
+                print('No arshad.hst file found in ', fragment_path)
+            
+            
+            # merge all the data for a fragment
+            # df_mastqm = pd.merge(df_mas[['TIME[S]', 'MASS[KG]']],
+            #                      df_tqm[['TIME[S]' ,'T_MAX[K]', 'Q_MAX[W/M2]']],
+            #                      on='TIME[S]')
+            df_mastqm = pd.merge(df_mas[['TIME[S]', 'MASS[KG]']],
+                                 df_tqm[['TIME[S]' ,'T_MAX[K]']],
+                                 on='TIME[S]')
+            df_mastqmtrj = pd.merge(df_mastqm[['TIME[S]', 'MASS[KG]', 
+                                               'T_MAX[K]']], # 'Q_MAX[W/M2]'
+                                    df_trj[['TIME[S]' ,'ALT[KM]', 'LT[DEG]', 'LG[DEG]', 'V[M/S]', 'TRK[KM]']],
+                                    on='TIME[S]')
+            df_mastqmtrjarea = pd.merge(df_mastqmtrj[['TIME[S]', 'MASS[KG]',
+                                                      'T_MAX[K]', # 'Q_MAX[W/M2]'
+                                                      'ALT[KM]', 'LT[DEG]', 'LG[DEG]', 'V[M/S]', 'TRK[KM]']],
+                                    df_area[['TIME[S]', 'PROJ_AREA[M^2]']],
+                                    on='TIME[S]')
+            df_frag = pd.merge(df_mastqmtrjarea[['TIME[S]', 'MASS[KG]',
+                                                 'T_MAX[K]', # 'Q_MAX[W/M2]'
+                                                 'ALT[KM]', 'LT[DEG]', 'LG[DEG]', 'V[M/S]', 'TRK[KM]', 
+                                                 'PROJ_AREA[M^2]']], 
+                               df_masmat, 
+                               on='TIME[S]')
+            df_frag['frag_id'] = str(folder)
+            
+            # compute change in mass (dm: mass of the current time step - mass of the former time step)
+            for row in range(1, len(df_frag)):
+                df_frag.loc[row, 'DM[KG]'] = abs(df_frag.loc[row, 'MASS[KG]'] - df_frag.loc[row-1, 'MASS[KG]'])
+            
+            # append single fragment's data to the dataframe containing all fragments
+            df_fragments = pd.concat([df_fragments, df_frag], ignore_index=True, join='outer')
+            
+
+        # print processing progress in console
+        pass
+    
+    
+    # check whether all fragments were evaluated and are represented in df_fragments
+    if set(df_frag_list['frag_id']).issubset(set(df_fragments['frag_id'])):
+        print('----------------------------\n')
+        print('All fragments were evaluated')
+        print('----------------------------\n')
+    else:
+        print('-------------------------------------------\n')
+        print('ATTENTION: Not all fragments were evaluated')
+        print('-------------------------------------------\n')
+
+    # add fragment's status information (demise, fragmentation, ground impact)
+    # df_fragments = pd.merge(df_fragments, df_frag_list[['frag_id', 'status']], on='frag_id')
+    
+    # add datetime
+    reentry_time = df_scenarios.loc[scenario_name, 'date']
+    reentry_time = datetime.fromisoformat(reentry_time)
+    df_fragments['DATETIME'] = df_fragments['TIME[S]'].apply(lambda x: reentry_time + timedelta(seconds=x))
+    
+    # rename columns of materials 
+    df_fragments.rename(columns={'cfrp-m56-ud1': 'cfrp-m56-ud134',
+                                 'cc-sic-ceram': 'cc-sic-ceramic'}, inplace=True)
+    
+    # rename columns, similar to Drama
+    df_fragments['V[M/S]'] = df_fragments['V[M/S]']/1000.0
+    df_fragments.rename(columns={'V[M/S]'           : 'V[KM/S]'}, inplace=True)
+    df_fragments.rename(columns={'TIME[S]'          : 'Time [s]',
+                                 'MASS[KG]'         : 'Total Fragment Mass [kg]',
+                                 'T_MAX[K]'         : 'Temp [K]',
+                                 # 'Q_MAX[W/M2]'      : 'Heatflux [W/m^2]',
+                                 'ALT[KM]'          : 'Altitude [km]',
+                                 'LT[DEG]'          : 'Lat [deg]',
+                                 'LG[DEG]'          : 'Lon [deg]',
+                                 'V[KM/S]'          : 'Velocity [km/s]',
+                                 'TRK[KM]'          : 'Downrange [km]',
+                                 'PROJ_AREA[M^2]'   : 'ReferenceArea [m^2]',
+                                 'frag_id'          : 'FragmentID',
+                                 'DM[KG]'           : 'd_m [kg]',
+                                 'status'           : 'Status',
+                                 'DATETIME'         : 'Datetime'}, inplace=True)
+    
+    # rename material columns to match the material names in material_data.xlsx
+    df_fragments.rename(columns={'aa7075'           : 'AA7075 [kg]',
+                                 'cfrp-m56-ud134'   : 'CFRP [kg]',
+                                 'aa2195'           : 'AA2195 [kg]',
+                                 'copper'           : 'Cu [kg]',
+                                 'cc-sic-ceramic'   : 'CCSic [kg]',
+                                 'a316'             : 'A316 [kg]',
+                                 'inconel718'       : 'Inconel718 [kg]',
+                                 }, inplace=True)
+    
+    # compute change in material mass for every material (dm: material mass of the current time step - material mass of the former time step)
+    df_fragments = df_fragments.sort_values(by=['FragmentID', 'Time [s]'])
+    for col in df_fragments.columns:
+        if col in ['AA7075 [kg]', 'CFRP [kg]', 'AA2195 [kg]', 'Cu [kg]', 'CCSic [kg]', 'A316 [kg]', 'Inconel718 [kg]']:
+            df_fragments[f'd_m {col}'] = df_fragments.groupby(['FragmentID'])[col].diff().abs()
+    
+    # reorder dataframe
+    df_fragments = df_fragments[[
+        "Time [s]", "Altitude [km]", "Lat [deg]", "Lon [deg]", "Velocity [km/s]", "Downrange [km]", "Total Fragment Mass [kg]",
+        "Temp [K]", "Datetime", "d_m [kg]", "FragmentID", "ReferenceArea [m^2]", 
+        "AA7075 [kg]", "CFRP [kg]", "AA2195 [kg]", "Cu [kg]", "CCSic [kg]", "A316 [kg]", "Inconel718 [kg]", 
+        "d_m AA7075 [kg]", "d_m CFRP [kg]", "d_m AA2195 [kg]", "d_m Cu [kg]", "d_m CCSic [kg]", "d_m A316 [kg]", "d_m Inconel718 [kg]"
+        ]]
+    
+    # add scenario and reentry_vehicle
+    df_fragments["scenario"] = scenario_name
+    df_fragments["reentry_vehicle"] = reentry_vehicle
+    
+    if df_fragments.empty:
+        print("No valid results were generated.")
+    else:
+        df_fragments.to_csv(f"output_data/trajectory/TRAJ_RAW_{scenario_name}.csv", index=False)
+        return df_fragments
+    
+# Import Debrisk Files
+def debrisk_input(df_scenarios, scenario_name):
+    # locate simulation data according to config.py and scenarios.xlsx (file_name_scenarios)
+    reentry_vehicle = df_scenarios.loc[scenario_name, 'reentry_vehicle']
+    scenario_folder_path = os.path.join(input_data_folder_path, scenario_name)
+
+    if not os.path.exists(scenario_folder_path):
+        print(colors.BOLD + colors.RED + f"Warning: Scenario folder '{scenario_folder_path}' not found." + colors.END)
+        
+    with open(os.path.join(scenario_folder_path, f'{scenario_name}.dat'), "r") as f:
+        lines = f.readlines()
+
+    # extract column names
+    variable_line = next(line for line in lines if line.startswith("VARIABLES"))
+    column_names = variable_line.replace("VARIABLES =", "").strip().split()
+
+    # additional columns for the zone and material
+    column_names.append("zone")
+    column_names.append("material")
+
+    # initializing
+    data = []
+    current_zone = None
+    current_material = None 
+
+    # go through all the lines of the file
+    for line in lines:
+        if line.startswith("ZONE"):
+            # extract zone and material names
+            current_zone = line.split("T='")[1].split("'")[0].split("_-_")[0]
+            current_material = line.split("T='")[1].split("'")[0].split("_-_")[1]
+        elif line.startswith("#") or line.startswith("VARIABLES") or line.strip() == "":
+            continue
+        else:
+            # extract data/values
+            values = line.strip().split()
+            values.append(current_zone)
+            values.append(current_material)
+            data.append(values)
+
+    # create dataframe
+    df = pd.DataFrame(data, columns=column_names)
+
+    # convert columns to float (if possible)
+    for col in df.columns[:-2]:  # last two columns: 'zone' and 'material'
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+        
+    # add datetime
+    reentry_time = df_scenarios.loc[scenario_name, 'date']
+    reentry_time = datetime.fromisoformat(reentry_time)
+    df['datetime'] = df['time(s)'].apply(lambda x: reentry_time + timedelta(seconds=x))    
+        
+    # initialize d_m
+    df['d_m(kg)'] = np.nan
+
+    # compute change in mass for every zone
+    for zone_name, group in df.groupby('zone'):
+        group_sorted = group.sort_values('time(s)')
+        mass_diff = group_sorted['aerodynamicMass(kg)'].diff().abs()
+        df.loc[group_sorted.index, 'd_m(kg)'] = mass_diff      
+
+    # rename columns, similar to Drama
+    df['altitude(m)'] = df['altitude(m)']/1000.0
+    df['velocity(m/s)'] = df['velocity(m/s)']/1000.0
+    df.rename(columns={'altitude(m)'        : 'altitude(km)'}, inplace=True)
+    df.rename(columns={'velocity(m/s)'      : 'velocity(km/s)'}, inplace=True)
+    df.rename(columns={'time(s)'                : 'Time [s]',
+                       'altitude(km)'           : 'Altitude [km]',
+                       'longitude(deg)'         : 'Lon [deg]',
+                       'latitude(deg)'          : 'Lat [deg]',
+                       'velocity(km/s)'         : 'Velocity [km/s]',                   
+                       'downRange(km)'          : 'Downrange [km]',                 
+                       'aerodynamicMass(kg)'    : 'Mass [kg]',
+                       'referenceAeroArea(m2)'  : 'ReferenceArea [m^2]',
+                       'wallTemperature(K)'     : 'Temp [K]',
+                       'zone'                   : 'ObjectID',
+                       'd_m(kg)'                : 'd_m [kg]',
+                       'material'               : 'Material',
+                       'datetime'               : 'Datetime'}, inplace=True)
+
+    # add scenario and reentry_vehicle
+    df['scenario'] = scenario_name
+    df['reentry_vehicle'] = reentry_vehicle
+    df['ObjectName'] = df['ObjectID']
+    df['Part'] = df['ObjectID']
+
+
+    df_trajaerodata = df[[
+        'Time [s]', 'Altitude [km]', 'Lat [deg]', 'Lon [deg]', 'Velocity [km/s]', 'Downrange [km]', 'Mass [kg]', 'Temp [K]',
+        'Datetime', 'd_m [kg]', 'ObjectID', 'ObjectName', 'Part', 'Material', 'ReferenceArea [m^2]', 'scenario', 'reentry_vehicle'
+        ]]
+              
+    if df_trajaerodata.empty:
+        print("No valid results were generated.")
+    else:
+        df_trajaerodata.to_csv(f"output_data/trajectory/TRAJ_RAW_{scenario_name}.csv", index=False)
+        return df_trajaerodata
 
 # Load External Trajectory Data
 def load_external_trajectory_data():
@@ -291,6 +605,210 @@ def extract_metadata_and_data(filepath):
                 
     return metadata, data
 
+#Compress trajectory to easen calculation:
+def compress_trajaerodata_dataframe(df_trajaerodata, compress_method, compress_interval, compress_lat, compress_lon, scenario_name):
+
+    df_copy = df_trajaerodata.copy()
+    df_copy['Datetime'] = pd.to_datetime(df_copy['Datetime'])
+
+    print('df_copy:\n', df_copy)
+    result_list = []
+
+    for object_id, group_df in df_copy.groupby('ObjectID'):
+        group_df = group_df.copy()
+
+        # Set bin_field and compute it
+        if compress_method == "time":
+            group_df['TimeBin'] = (
+                ((group_df['Time [s]'] - group_df['Time [s]'].min()) // compress_interval) * compress_interval
+                + group_df['Time [s]'].min()
+            )
+            bin_field = 'TimeBin'
+        elif compress_method == "height":
+            group_df['HeightBin'] = (
+                group_df['Altitude [km]'].max() -
+                (((group_df['Altitude [km]'].max() - group_df['Altitude [km]']) // compress_interval) * compress_interval)
+            )
+            bin_field = 'HeightBin'
+        else:
+            raise ValueError("Invalid compress_method. Use 'time' or 'height'.")
+
+        # Apply spatial binning
+        group_df['LatBin'] = (group_df['Lat [deg]'] // compress_lat) * compress_lat
+        group_df['LonBin'] = (group_df['Lon [deg]'] // compress_lon) * compress_lon
+
+        # Sort to ensure aggregation uses the latest values
+        group_df = group_df.sort_values('Datetime')
+
+        # Define fields for grouping
+        grouping_fields = ['ObjectID', bin_field, 'LatBin', 'LonBin']
+
+        # Define aggregation rules
+        agg_dict = {
+            'Time [s]': 'last',
+            'Altitude [km]': 'last',
+            'Lat [deg]': 'last',
+            'Lon [deg]': 'last',
+            'Velocity [km/s]': 'last',
+            'Downrange [km]': 'last',
+            'Mass [kg]': 'last',
+            'Temp [K]': 'last',
+            'Datetime': 'last',
+            'ObjectName': 'last',
+            'Part': 'last',
+            'Material': 'last',
+            'ReferenceArea [m^2]': 'last',
+            'scenario': 'last',
+            'reentry_vehicle': 'last',
+            'd_m [kg]': 'sum',
+        }
+
+        # Perform grouping and aggregation
+        compressed_group = (
+            group_df.groupby(grouping_fields, as_index=False)
+                    .agg(agg_dict)
+        )
+
+        result_list.append(compressed_group)
+
+    # Combine all object results
+    compressed = pd.concat(result_list, ignore_index=True)
+
+    # Restore original column order
+    original_cols = df_trajaerodata.columns.tolist()
+
+    print("Original columns expected:", original_cols)
+    print("Compressed columns available:", compressed.columns.tolist())
+
+    # Fill missing columns with NaN
+    missing_cols = [col for col in original_cols if col not in compressed.columns]
+    for col in missing_cols:
+        print(f"Warning: Column '{col}' missing in compressed output. Filling with NaN.")
+        compressed[col] = pd.NA
+
+    # Reorder columns
+    compressed = compressed[original_cols]
+
+    # Sort by original values
+    compressed = compressed.sort_values(
+        by=['ObjectID', 'Time [s]', 'Lat [deg]', 'Lon [deg]'],
+        ascending=[True, True, True, True]
+    )
+
+    # Save and return
+    output_path = f"output_data/trajectory/TRAJ_COMP_{scenario_name}.csv"
+    compressed.to_csv(output_path, index=False)
+    print(f"Compressed trajectory saved to: {output_path}")
+
+    return compressed
+
+#Compress trajectory from Scarab to easen calculation:
+def compress_trajaerodata_scarab_dataframe(df_trajaerodata, compress_method, compress_interval, compress_lat, compress_lon, scenario_name):
+
+    df_copy = df_trajaerodata.copy()
+    
+    print('df_copy:\n', df_copy)
+    result_list = []
+
+    for fragment_id, group_df in df_copy.groupby('FragmentID'):
+        group_df = group_df.copy()
+
+        # Set bin_field and compute it
+        if compress_method == "time":
+            group_df['TimeBin'] = (
+                ((group_df['Time [s]'] - group_df['Time [s]'].min()) // compress_interval) * compress_interval
+                + group_df['Time [s]'].min()
+            )
+            bin_field = 'TimeBin'
+        elif compress_method == "height":
+            group_df['HeightBin'] = (
+                group_df['Altitude [km]'].max() -
+                (((group_df['Altitude [km]'].max() - group_df['Altitude [km]']) // compress_interval) * compress_interval)
+            )
+            bin_field = 'HeightBin'
+        else:
+            raise ValueError("Invalid compress_method. Use 'time' or 'height'.")
+
+        # Apply spatial binning
+        group_df['LatBin'] = (group_df['Lat [deg]'] // compress_lat) * compress_lat
+        group_df['LonBin'] = (group_df['Lon [deg]'] // compress_lon) * compress_lon
+
+        # Sort to ensure aggregation uses the latest values
+        group_df = group_df.sort_values('Datetime')
+
+        # Define fields for grouping
+        grouping_fields = ['FragmentID', bin_field, 'LatBin', 'LonBin']
+
+        # Define aggregation rules
+        agg_dict = {
+            'Time [s]': 'last',
+            'Altitude [km]': 'last',
+            'Lat [deg]': 'last',
+            'Lon [deg]': 'last',
+            'Velocity [km/s]': 'last',
+            'Downrange [km]': 'last',
+            'Total Fragment Mass [kg]': 'last',
+            'Temp [K]': 'last',
+            'Datetime': 'last',
+            'd_m [kg]': 'sum',
+            'ReferenceArea [m^2]': 'last',
+            'AA7075 [kg]': 'last',
+            'CFRP [kg]': 'last',
+            'AA2195 [kg]': 'last',
+            'Cu [kg]': 'last',
+            'CCSic [kg]': 'last',
+            'A316 [kg]': 'last',
+            'Inconel718 [kg]': 'last',
+            'd_m AA7075 [kg]': 'sum',
+            'd_m CFRP [kg]': 'sum',
+            'd_m AA2195 [kg]': 'sum',
+            'd_m Cu [kg]': 'sum',
+            'd_m CCSic [kg]': 'sum',
+            'd_m A316 [kg]': 'sum',
+            'd_m Inconel718 [kg]': 'sum',
+            'scenario': 'last',
+            'reentry_vehicle': 'last',
+        }
+
+        # Perform grouping and aggregation
+        compressed_group = (
+            group_df.groupby(grouping_fields, as_index=False)
+                    .agg(agg_dict)
+        )
+
+        result_list.append(compressed_group)
+
+    # Combine all object results
+    compressed = pd.concat(result_list, ignore_index=True)
+
+    # Restore original column order
+    original_cols = df_trajaerodata.columns.tolist()
+
+    print("Original columns expected:", original_cols)
+    print("Compressed columns available:", compressed.columns.tolist())
+
+    # Fill missing columns with NaN
+    missing_cols = [col for col in original_cols if col not in compressed.columns]
+    for col in missing_cols:
+        print(f"Warning: Column '{col}' missing in compressed output. Filling with NaN.")
+        compressed[col] = pd.NA
+
+    # Reorder columns
+    compressed = compressed[original_cols]
+
+    # Sort by original values
+    compressed = compressed.sort_values(
+        by=['FragmentID', 'Time [s]', 'Lat [deg]', 'Lon [deg]'],
+        ascending=[True, True, True, True]
+    )
+
+    # Save and return
+    output_path = f"output_data/trajectory/TRAJ_COMP_{scenario_name}.csv"
+    compressed.to_csv(output_path, index=False)
+    print(f"Compressed trajectory saved to: {output_path}")
+
+    return compressed
+
 #Ectxtrat Data from Trajectory and Aerothermal Files
 def process_files(aerothermal_file, trajectory_file, reentry_time, pydrama_results_folder=None):
     # Extract data and metadata from files
@@ -400,7 +918,7 @@ def emission_preprocessing_data(df_trajectory_results, df_phases):
     except Exception as e:
         handle_error(e, "emission_preprocessing_data", "Error while preprocessing data for Emission Calculation.")
         
-    return df_cleaned        
+    return df_cleaned       
 
 # Saving the Results of the Emission Calculations
 def save_emission_results(emission_results, scenario_name):
@@ -425,7 +943,7 @@ def save_emission_results(emission_results, scenario_name):
 
 def filter_emission_data(df, compress_method, compress_interval, compress_lat, compress_lon):
     required_columns = ['Time [s]', 'Altitude [km]', 'Lat [deg]', 'Lon [deg]', 
-                        'Velocity [km/s]', 'Datetime', 'd_m [kg]']
+                        'Velocity [km/s]', 'Downrange [km]', 'Datetime', 'd_m [kg]']
     species_columns = df.columns[df.columns.get_loc('ReferenceArea [m^2]') + 1:].tolist()
     
     if not all(col in df.columns for col in required_columns):

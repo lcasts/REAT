@@ -15,8 +15,8 @@ user_defined_scenarios = ["Falcon_9"] # Based on the scenario name
 #region: #### Trajectory Config ####
 #### Selection of Trajectory Data ####
 #-------------------------------------
-traj_inp_data = 'OwnDrama' #OwnBallistic, Ballistic, OwnDrama, PyDrama
-file_name_ext_trajectory = 'input_data/trajectory.csv' 
+traj_inp_data = 'OwnDrama' #OwnBallistic, Ballistic, OwnDrama, PyDrama, OwnScarab, OwnDebrisk
+file_name_ext_trajectory = 'input_data/merged_trajectory_aerothermal_data.csv' 
 
 #### Simulation Parameters ####
 #-------------------------------------
@@ -45,9 +45,8 @@ delta_t = 0.1
 #### Data Compression ####
 #-------------------------------------
 compress_data = True                # For faster emission calculation time with NASA CEA
-compress_method = "height"            # Choose between "time" or "height" as the compression interval
-#compress_method = "height"
-compress_interval = 1              # Choose interval steps in [s] or [km]
+compress_method = "height"          # Choose between "time" or "height" as the compression interval
+compress_interval = 1               # Choose interval steps in [s] or [km]
 compress_atmosphere = "averages"    # Choose "averages" to average the atmosphere data of the interval
 #compress_atmosphere = "latest"     # Or choose "latest" for just the value at the given time/height step
 interval_tolerance = 1e-6           # Allow for floating-point precision issues
@@ -65,8 +64,8 @@ calculate_emissions = True
 use_emission_factors = False
 emission_factor_method = "stoichiometric"
 use_nasa_cea = True
-calculate_nox = True
-nox_method = "cantera" # nasa_cea, cantera
+calculate_nox = False
+nox_method = "nasa_cea" # nasa_cea, cantera
 calculate_black_carbon = False # for now not implemented
 
 #### Emission Constants ####
@@ -100,7 +99,7 @@ kappa = 1.4
 #### NASA CEA Config ####
 #-------------------------------------
 afterburning = True                 # Include afterburning calculation in final emission results
-rof_f = 4 #Afterburning diameter factor for interaction
+rof_f = 2 #Afterburning diameter factor for interaction
 trace = "1.e-10"
 problem_afterburning = "tp"     # tp, hp
 

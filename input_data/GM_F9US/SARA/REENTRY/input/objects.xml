@@ -1,12 +1,12 @@
-<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<?xml version='1.0' encoding='utf-8'?>
 <objects>
     <object>
         <name>LOX_Tank - AA2198</name>
         <uniqueID>4955aedf-f56c-4fc4-873a-5e322a2fcd5e</uniqueID>
         <primitive>
             <cylinder>
-                <radius>1.83</radius>
-                <height>5.1</height>
+                <radius>0.75</radius>
+                <height>0.8388157894736842</height>
             </cylinder>
         </primitive>
         <color>
@@ -14,7 +14,7 @@
             <Green>128</Green>
             <Blue>128</Blue>
         </color>
-        <mass>1118</mass>
+        <mass>247.34513274336283</mass>
         <wallThickness>0.005</wallThickness>
         <material>drama-AA7075</material>
         <relativePosition>
@@ -39,9 +39,9 @@
         <uniqueID>7a1ae0a8-fdf2-4d39-a075-2360bef550df</uniqueID>
         <primitive>
             <ring>
-                <radius>1.83</radius>
-                <length>0.5</length>
-                <innerRadius>1.5</innerRadius>
+                <radius>0.75</radius>
+                <length>0.08223684210526315</length>
+                <innerRadius>0.6147540983606558</innerRadius>
             </ring>
         </primitive>
         <color>
@@ -49,10 +49,10 @@
             <Green>128</Green>
             <Blue>128</Blue>
         </color>
-        <mass>1100.0</mass>
+        <mass>243.36283185840708</mass>
         <material>drama-AA7075</material>
         <relativePosition>
-            <cartX>2.8</cartX>
+            <cartX>0.4605263157894737</cartX>
             <cartY>0.0</cartY>
             <cartZ>0.0</cartZ>
             <yaw>0.0</yaw>
@@ -73,7 +73,7 @@
         <uniqueID>b98d1bf0-27ab-4341-9a69-bb066b24cd01</uniqueID>
         <primitive>
             <sphere>
-                <radius>0.3</radius>
+                <radius>0.12295081967213115</radius>
             </sphere>
         </primitive>
         <color>
@@ -81,11 +81,11 @@
             <Green>128</Green>
             <Blue>128</Blue>
         </color>
-        <mass>75.0</mass>
+        <mass>16.5929203539823</mass>
         <material>drama-HC-CFRP-8ply</material>
         <relativePosition>
-            <cartX>2.85</cartX>
-            <cartY>1.0</cartY>
+            <cartX>0.46875000000000006</cartX>
+            <cartY>0.40983606557377045</cartY>
             <cartZ>0.0</cartZ>
             <yaw>0.0</yaw>
             <pitch>0.0</pitch>
@@ -105,7 +105,7 @@
         <uniqueID>528e42ac-028a-433e-9993-a445fb764cf1</uniqueID>
         <primitive>
             <sphere>
-                <radius>0.3</radius>
+                <radius>0.12295081967213115</radius>
             </sphere>
         </primitive>
         <color>
@@ -113,11 +113,11 @@
             <Green>128</Green>
             <Blue>128</Blue>
         </color>
-        <mass>75.0</mass>
+        <mass>16.5929203539823</mass>
         <material>drama-HC-CFRP-8ply</material>
         <relativePosition>
-            <cartX>2.85</cartX>
-            <cartY>-1.0</cartY>
+            <cartX>0.46875000000000006</cartX>
+            <cartY>-0.40983606557377045</cartY>
             <cartZ>0.0</cartZ>
             <yaw>0.0</yaw>
             <pitch>0.0</pitch>
@@ -137,9 +137,9 @@
         <uniqueID>8d3100c0-08f6-43c7-b55f-bc9dfecb8aa1</uniqueID>
         <primitive>
             <box>
-                <width>1.0</width>
-                <height>0.8</height>
-                <length>0.4</length>
+                <width>0.40983606557377045</width>
+                <height>0.13157894736842107</height>
+                <length>0.16393442622950818</length>
             </box>
         </primitive>
         <color>
@@ -147,10 +147,10 @@
             <Green>128</Green>
             <Blue>128</Blue>
         </color>
-        <mass>400.0</mass>
+        <mass>88.49557522123894</mass>
         <material>drama-Bat-Li</material>
         <relativePosition>
-            <cartX>2.8</cartX>
+            <cartX>0.4605263157894737</cartX>
             <cartY>0.0</cartY>
             <cartZ>0.0</cartZ>
             <yaw>0.0</yaw>
@@ -171,8 +171,8 @@
         <uniqueID>76ded92f-f192-4cee-905e-6adcb4380736</uniqueID>
         <primitive>
             <cylinder>
-                <radius>1.83</radius>
-                <height>4.0</height>
+                <radius>0.75</radius>
+                <height>0.6578947368421052</height>
             </cylinder>
         </primitive>
         <color>
@@ -180,11 +180,11 @@
             <Green>128</Green>
             <Blue>128</Blue>
         </color>
-        <mass>452</mass>
+        <mass>100.0</mass>
         <wallThickness>0.0024</wallThickness>
         <material>drama-AA7075</material>
         <relativePosition>
-            <cartX>5.05</cartX>
+            <cartX>0.830592105263158</cartX>
             <cartY>0.0</cartY>
             <cartZ>0.0</cartZ>
             <yaw>0.0</yaw>
@@ -205,8 +205,8 @@
         <uniqueID>edb8bfbd-5700-4c08-b688-2449d41955f1</uniqueID>
         <primitive>
             <cone>
-                <radius>1.83</radius>
-                <height>0.6</height>
+                <radius>0.75</radius>
+                <height>0.09868421052631579</height>
             </cone>
         </primitive>
         <color>
@@ -214,10 +214,10 @@
             <Green>128</Green>
             <Blue>128</Blue>
         </color>
-        <mass>300.0</mass>
+        <mass>66.3716814159292</mass>
         <material>drama-AA7075</material>
         <relativePosition>
-            <cartX>7.3</cartX>
+            <cartX>1.200657894736842</cartX>
             <cartY>0.0</cartY>
             <cartZ>0.0</cartZ>
             <yaw>0.0</yaw>
@@ -272,8 +272,8 @@
         <uniqueID>69a318fe-bf9d-4632-92cf-14f38d7cfbbf</uniqueID>
         <primitive>
             <cone>
-                <radius>1.2</radius>
-                <height>4.0</height>
+                <radius>0.4918032786885246</radius>
+                <height>0.6578947368421052</height>
             </cone>
         </primitive>
         <color>
@@ -281,10 +281,10 @@
             <Green>128</Green>
             <Blue>128</Blue>
         </color>
-        <mass>200.0</mass>
+        <mass>44.24778761061947</mass>
         <material>drama-Carbon-Carbon</material>
         <relativePosition>
-            <cartX>10.0</cartX>
+            <cartX>1.6447368421052633</cartX>
             <cartY>0.0</cartY>
             <cartZ>0.0</cartZ>
             <yaw>180.0</yaw>
@@ -305,9 +305,9 @@
         <uniqueID>110ee3dd-7d9a-49cd-88e5-80c1fbcbd7b8</uniqueID>
         <primitive>
             <ring>
-                <radius>0.8</radius>
-                <length>2.0</length>
-                <innerRadius>0.5</innerRadius>
+                <radius>0.32786885245901637</radius>
+                <length>0.3289473684210526</length>
+                <innerRadius>0.20491803278688522</innerRadius>
             </ring>
         </primitive>
         <color>
@@ -315,7 +315,7 @@
             <Green>128</Green>
             <Blue>128</Blue>
         </color>
-        <mass>300.0</mass>
+        <mass>66.3716814159292</mass>
         <material>drama-A316</material>
         <relativePosition>
             <cartX>0.0</cartX>
