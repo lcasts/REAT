@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<fragments>
+	<fragment>
+		<name>parent_body</name>
+		<uniqueID>75125a0d-0975-446b-b433-cbfba8c58e11</uniqueID>
+		<quantity>1</quantity>
+		<objects>
+			<uniqueID>979a2b11-8171-4e88-926f-49c693fbc997</uniqueID>
+		</objects>
+		<epoch>2016-01-05T01:27:39.508</epoch>
+		<mass>50.0</mass>
+		<velocity>47.78499</velocity>
+		<latitude>-8.355092</latitude>
+		<longitude>156.93033</longitude>
+		<shape>connected</shape>
+		<crossSectionArea>0.7853982</crossSectionArea>
+		<isFloating>true</isFloating>
+	</fragment>
+</fragments>

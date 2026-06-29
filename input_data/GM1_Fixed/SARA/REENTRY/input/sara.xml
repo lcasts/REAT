@@ -1,0 +1,79 @@
+<?xml version="1.0"?>
+<sara>
+	<runid>GM1_Fixed</runid>
+	<comment1>DRAMA - Default Settings</comment1>
+	<comment2>Debris Risk Assessment and Mitigation Analysis</comment2>
+	<beginDate>2016-11-01T12:00:00.000</beginDate>
+	<inputMethod>expert</inputMethod>
+	<runMode>reentry-only</runMode>
+	<monteCarlo>false</monteCarlo>
+	<sesam>
+		<dataDirectory>C:\Program Files (x86)\DRAMA-3.1.1\TOOLS\SARA\REENTRY\data</dataDirectory>
+		<atdbFilePrefix>C:\Program Files (x86)\DRAMA-3.1.1\TOOLS\SARA\REENTRY\data\ATDB</atdbFilePrefix>
+		<SesamLibs>C:\Program Files (x86)\DRAMA-3.1.1\TOOLS\SARA\REENTRY</SesamLibs>
+		<SesamBinary>C:\Program Files (x86)\DRAMA-3.1.1\TOOLS\SARA\REENTRY\sesam_windows.exe</SesamBinary>
+		<OscarBinary>C:\Program Files (x86)\DRAMA-3.1.1\TOOLS\OSCAR\oscar_windows.exe</OscarBinary>
+		<OscarStaticDataPath>C:\Program Files (x86)\DRAMA-3.1.1\TOOLS\OSCAR\data</OscarStaticDataPath>
+		<OscarNonStaticDataPath>C:\Program Files (x86)\DRAMA-3.1.1\TOOLS\OSCAR\data</OscarNonStaticDataPath>
+		<CstateBinary>C:\Program Files (x86)\DRAMA-3.1.1\TOOLS\CSTATE\cstate_windows.exe</CstateBinary>
+		<name>satelliteOne</name>
+		<initialState>
+			<coordinateSystem>geodetic</coordinateSystem>
+			<initialDate>2016-11-01T12:00:00.000</initialDate>
+			<element1>120.0</element1>
+			<element2>1.0</element2>
+			<element3>1.0</element3>
+			<element4>7.8</element4>
+			<element5>-2.0</element5>
+			<element6>10.614</element6>
+			<reflectivityCoefficient>1.3</reflectivityCoefficient>
+		</initialState>
+		<position>
+			<radius>0.0</radius>
+			<latitude>-8.533247</latitude>
+			<longitude>8.948465</longitude>
+		</position>
+		<velocity>
+			<magnitude>0.0</magnitude>
+			<flightPathAngle>-0.001677</flightPathAngle>
+			<headingAngle>84.8188</headingAngle>
+		</velocity>
+		<attitude>
+			<fixed>
+				<attack>0.0</attack>
+				<sideSlip>0.0</sideSlip>
+				<bank>0.0</bank>
+			</fixed>
+		</attitude>
+		<fragmentsAttitudeAfterBreakup>
+			<tumbling>
+			</tumbling>
+		</fragmentsAttitudeAfterBreakup>
+		<globalSpacecraftTemperature>233.15</globalSpacecraftTemperature>
+		<atmosphericModel>C:\Program Files (x86)\DRAMA-3.1.1\_</atmosphericModel>
+		<VoxelatorMode>1</VoxelatorMode>
+		<VoxelatorResolutionLength>0.1</VoxelatorResolutionLength>
+		<environment>
+			<densityScalingFactor>1.0</densityScalingFactor>
+			<dynamic>yes</dynamic>
+			<useWind>no</useWind>
+			<useEnvCSV>no</useEnvCSV>
+			<solarActivity>
+				<valuesFromFile>yes</valuesFromFile>
+			</solarActivity>
+		</environment>
+		<energyThreshold>15.0</energyThreshold>
+		<plotOptions>
+			<visibilityMaps>no</visibilityMaps>
+			<objectTrajectories>no</objectTrajectories>
+		</plotOptions>
+	</sesam>
+	<seram>
+		<reentryType>controlled</reentryType>
+		<uncontrolledMethod>latitudeBandLimited</uncontrolledMethod>
+		<growthScenario>MEDIUM-VARIANT</growthScenario>
+		<casualtyThreshold>15.0</casualtyThreshold>
+		<inclinationAngle>90.0</inclinationAngle>
+		<dataPath>C:\Program Files (x86)\DRAMA-3.1.1\TOOLS\SARA\RISK\data</dataPath>
+	</seram>
+</sara>

@@ -8,7 +8,7 @@ import os
 # --- Read CSV File ---
 def read_emissions_csv(file_path):
     df = pd.read_csv(file_path)
-    emission_start_index = df.columns.get_loc('reentry_vehicle') + 1
+    emission_start_index = df.columns.get_loc('total_sum_emissions') + 1
     emission_columns = df.columns[emission_start_index:]
     clean_columns = [re.sub(r'\*', '', col).strip() for col in emission_columns]
     df.rename(columns=dict(zip(emission_columns, clean_columns)), inplace=True)
@@ -34,30 +34,37 @@ def aggregate_by_altitude(df, emissions, bin_size=5, max_altitude=100):
 
 # --- Plot Top 5 Emissions Per Bin ---
 def plot_top5_emissions_per_bin(binned_emissions, save_name):
-    top_5_emissions_per_bin = pd.DataFrame()
+    rows = []
+    labels = []
 
-    for bin_label, emissions in binned_emissions.iterrows():
-        top_5_species = emissions.sort_values(ascending=False).head(5)
-        top_5_emissions_per_bin = pd.concat([top_5_emissions_per_bin, top_5_species.to_frame().T], ignore_index=True)
+    for interval, emissions in binned_emissions.iterrows():
+        top5 = emissions.sort_values(ascending=False).head(5)
+        rows.append(top5)
+        labels.append(f"{int(interval.right)} km")
 
-    altitude_labels = [f'{int(bin.right)} km' for bin in binned_emissions.index.categories]
-    top_5_emissions_per_bin.index = altitude_labels
+    top_5_emissions_per_bin = pd.DataFrame(rows).fillna(0.0)
+    top_5_emissions_per_bin.index = labels
 
-    color_list = list(mcolors.CSS4_COLORS.values())
     num_colors = len(top_5_emissions_per_bin.columns)
     colors = plt.cm.get_cmap('tab20', num_colors)
 
     plt.figure(figsize=(10, 8))
     for i, species in enumerate(top_5_emissions_per_bin.columns):
-        plt.barh(top_5_emissions_per_bin.index, top_5_emissions_per_bin[species],
-                 color=colors(i), label=species, log=False)
+        plt.barh(
+            top_5_emissions_per_bin.index,
+            top_5_emissions_per_bin[species],
+            color=colors(i),
+            label=species
+        )
 
-    plt.title('Emissions for each 5 km Interval (up to 100 km)')
     plt.xlabel('Emissions [kg]')
     plt.ylabel('Altitude')
     plt.legend(title='Species', bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.tight_layout()
-    plt.savefig(f"{save_name}_bar_chart.png")
+
+    os.makedirs(os.path.join("output_data", "plots"), exist_ok=True)
+    out_png = os.path.join("output_data", "plots", f"{save_name}_bar_chart.png")
+    plt.savefig(out_png, dpi=300)
     plt.show()
 
 # --- Plot Pie Chart for Total Emissions ---
@@ -75,7 +82,7 @@ def plot_emissions_pie(df, emissions, save_name):
         major_species,
         labels=major_species.index,
         autopct='%1.1f%%',
-        pctdistance=0.8,  # Push percentages outward
+        pctdistance=0.9,  # Push percentages outward
         labeldistance=1.05,
         startangle=140
     )
@@ -83,7 +90,7 @@ def plot_emissions_pie(df, emissions, save_name):
         autotext.set_fontsize(9)
     ax.set_title('Total Emission Share per Species')
     plt.tight_layout()
-    plt.savefig(f"{save_name}_pie_chart.png")
+    plt.savefig(f"output_data\plots\{save_name}_pie_chart.png")
     plt.show()
 
 # --- Save Total Emissions to Excel ---
@@ -92,11 +99,16 @@ def save_emissions_summary(df, emissions, save_name):
     total_sum = total_emissions.sum()
     summary_df = total_emissions.to_frame(name='Total Emissions [kg]')
     summary_df.loc['TOTAL'] = total_sum
-    summary_df.to_excel(f"{save_name}_emissions_summary.xlsx")
+    summary_df.to_excel(f"output_data\plots\{save_name}_emissions_summary.xlsx")
 
 # --- Main Execution ---
 def main():
-    file_path = 'output_data\emissions\EMIS_Falcon_9.csv'  # Replace with your CSV file path
+    #file_path = 'output_data\emissions\EMIS_Ariane_6_GM(3).csv'  # Replace with your CSV file path
+    file_path = 'output_data/emissions/EMIS_2019-002_Falcon_9-025_Stage_2_CEA.csv'  # Replace with your CSV file path
+    #file_path = 'output_data\emissions\EMIS_2025-045_Falcon_9-428_Stage_2_(F445)_CEA.csv'  # Replace with your CSV file path
+
+    #file_path = 'output_data\emissions\EMIS_Ariane_6.csv'  # Replace with your CSV file path
+    #file_path = 'output_data\emissions\EMIS_Falcon_9.csv'  # Replace with your CSV file path
     save_name = os.path.splitext(os.path.basename(file_path))[0]  # Extract filename without extension
     df, emission_cols = read_emissions_csv(file_path)
     binned_emissions = aggregate_by_altitude(df, emission_cols)

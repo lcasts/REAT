@@ -7,18 +7,17 @@ import numpy as np
 
 #### Choose which Scenarios to process ####
 #-------------------------------------
-all_scenarios = False # When False only the user_defined_scenarios will be processed
-user_defined_scenarios = ["Falcon_9"] # Based on the scenario name
-
+all_scenarios = True # When False only the user_defined_scenarios will be processed
+user_defined_scenarios = ["2021-034_CZ-3B_Y47_Stage_3"] # Based on the scenario name 2019-002_Falcon_9-025_Stage_2 2019-001_CZ-2D_Y35_Stage_2
 ##endregion
 
 #region: #### Trajectory Config ####
 #### Selection of Trajectory Data ####
 #-------------------------------------
-traj_inp_data = 'OwnDrama' #OwnBallistic, Ballistic, OwnDrama, PyDrama, OwnScarab, OwnDebrisk
+traj_inp_data = 'PyDrama' #OwnBallistic, Ballistic, OwnDrama, PyDrama, OwnScarab, OwnDebrisk
 file_name_ext_trajectory = 'input_data/merged_trajectory_aerothermal_data.csv' 
 
-#### Simulation Parameters ####
+#### Ballistic Trajectory Simulation Parameters ####
 #-------------------------------------
 t_max = 720                 # Maximum simulation time [s]
 t_span = (0, t_max)         # Time span of the simulation
@@ -31,6 +30,9 @@ max_step = 0.1              # Step size [s]
 R_0 = 6.378388e6            # Mean Earth Radius [m] (WGS84)
 g_0 = 9.80665               # Mean Earth Gravity [m/s²]
 R = 287.058                 # J/(kg·K)      for p = ρ⋅R⋅T
+kappa = 1.4                 # Heat capacity
+Pr_lam = 0.72               # Prandtl laminar
+Pr_turb = 0.9                # Prandtl turbulent
 rho_0 = 1.225               # kg/m^3
 p_0 = 1013.25               # hPa
 a_bal = 617                 # W/m³
@@ -38,9 +40,10 @@ b_bal = 1000                # m/s
 c_bal = 0.0001705           # Ws^3 kg^(-0.5) m^(-1)
 sigma_bal = 5.670374E-08    # W/(m^2 K^4)
 
-#### Initial Values (Trajectory ODE) ####
+#### Initial Values ####
 #-------------------------------------
 delta_t = 0.1
+fragmentation_altitude = 80000
 
 #### Data Compression ####
 #-------------------------------------
@@ -50,8 +53,8 @@ compress_interval = 1               # Choose interval steps in [s] or [km]
 compress_atmosphere = "averages"    # Choose "averages" to average the atmosphere data of the interval
 #compress_atmosphere = "latest"     # Or choose "latest" for just the value at the given time/height step
 interval_tolerance = 1e-6           # Allow for floating-point precision issues
-compress_lat = 0.1
-compress_lon = 0.1
+compress_lat = .5
+compress_lon = .5
 
 #endregion
 
@@ -61,12 +64,20 @@ compress_lon = 0.1
 # Choose if you want to include emission calculation to trajectory calculation
 calculate_emissions = True
 # Choose which emission calculation type to use
-use_emission_factors = False
-emission_factor_method = "stoichiometric"
+use_emission_factors = True
+emission_factor_method = "atomic" #"stoichiometric" or "atomic"
 use_nasa_cea = True
-calculate_nox = False
+calculate_nox = True
 nox_method = "nasa_cea" # nasa_cea, cantera
 calculate_black_carbon = False # for now not implemented
+#-------------------------------------
+x_ab = 4   #Emission calculation diameter factor for interaction
+temp_factor = "eckert_lam" # roberts_lam, roberts_turb, eckert_lam, eckert_turb, mix_temperature, isentropic, e.g. 0.5
+
+#### NASA CEA Config ####
+trace = "1.e-15"
+problem_material_combustion = "tp"     # tp, hp
+problem_hotgas_calculation = "hp"
 
 #### Emission Constants ####
 #-------------------------------------
@@ -86,23 +97,8 @@ molar_masses = {
 # Avogadro's number
 avogadro_number = 6.02214076e23  # molecules per mole
 
-# Gas constant
-R = 8.314  # Universal gas constant in J/(mol*K)
-
 # Threshold for species to be considered not zero
-threshold = 1e-12
-
-# Heat capacity
-kappa = 1.4
-
-
-#### NASA CEA Config ####
-#-------------------------------------
-afterburning = True                 # Include afterburning calculation in final emission results
-rof_f = 2 #Afterburning diameter factor for interaction
-trace = "1.e-10"
-problem_afterburning = "tp"     # tp, hp
-
+threshold = 1e-15
 #endregion
 
 #region: #### Folder Path, Data Names & Co. ####
@@ -132,6 +128,8 @@ sheet_name_scenarios = 'scenarios'
 
 file_name_material_data = 'material_data.xlsx'
 sheet_name_material_data = 'Material_Data'
+
+file_name_ct_species = 'cea_species.yaml'
 
 #### Colors for Terminal Outputs ####
 class colors:

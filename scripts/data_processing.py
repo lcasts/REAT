@@ -125,6 +125,7 @@ def drama_input(df_scenarios,scenario_name, pydrama_results_folder=None):
     else:
         df_trajaerodata = pd.DataFrame()
         print("No valid results were generated.")
+        return df_trajaerodata
 
 # Import Scarab Files
 def scarab_input(df_scenarios, scenario_name):
@@ -136,7 +137,7 @@ def scarab_input(df_scenarios, scenario_name):
         print(colors.BOLD + colors.RED + f"Warning: Scenario folder '{scenario_folder_path}' not found." + colors.END)
               
     # import list of fragments, clean data
-    df_frag_list = pd.read_csv(os.path.join(scenario_folder_path, 'frag.lst'), sep='\s+', skiprows=1, 
+    df_frag_list = pd.read_csv(os.path.join(scenario_folder_path, 'frag.lst'), sep='\\s+', skiprows=1, 
                                names=['frag_id', 'frag_description', 'frag_description2', 'parent', 'status', 'child1', 'minus', 'child2'],
                                dtype={'frag_id': str})      # fragment ID as string to correctly capture fragments with e.g. part x.10 or x.20
     df_frag_list.loc[df_frag_list['child1'] == 'Impact', 'child1'] = np.nan
@@ -149,7 +150,7 @@ def scarab_input(df_scenarios, scenario_name):
     df_frag_list.loc[df_frag_list['children'] == 'nan-nan', 'children'] = np.nan
     
     # import list of materials
-    # df_materials = pd.read_csv(os.path.join(scenario_folder_path, '0.1', 'material.lst'), sep='\s+', names=['material_id', 'material_name'], 
+    # df_materials = pd.read_csv(os.path.join(scenario_folder_path, '0.1', 'material.lst'), sep='\\s+', names=['material_id', 'material_name'], 
     #                            skiprows=lambda x: x < 2 or (x - 2) % 17 != 0)
 
     # initialize dataframe containing data of all fragments
@@ -182,14 +183,14 @@ def scarab_input(df_scenarios, scenario_name):
                         lines[0] = lines[0].replace("cfrp-m56-ud1copper", "cfrp-m56-ud1 copper")
                     if 'cc-sic-cerama316' in lines[0]:
                         lines[0] = lines[0].replace("cc-sic-cerama316", "cc-sic-ceram a316")                        
-                    df_masmat = pd.read_csv(StringIO(''.join(lines)), sep="\s+", header=0)
+                    df_masmat = pd.read_csv(StringIO(''.join(lines)), sep="\\s+", header=0)
                 df_masmat.rename(columns={'TIME_[S]': 'TIME[S]'}, inplace=True)
             else:
                 print('No masmat.hst file found in ', fragment_path)
             
             # import and wrangle mas data (in mas.hst)
             if os.path.isfile(mas_path):
-                df_mas = pd.read_csv(mas_path, skiprows=18, sep="\s+",
+                df_mas = pd.read_csv(mas_path, skiprows=18, sep="\\s+",
                                      names=['TIME', 'ALT', 'TRK', 'MASS', 'COMX', 'COMY', 'COMZ', 'IXX', 'IYY', 'IZZ', 'IXY', 'IXZ', 'IYZ'])
                 df_mas.rename(columns={'TIME': 'TIME[S]'}, inplace=True)
                 df_mas.rename(columns={'ALT': 'ALT[KM]'}, inplace=True)
@@ -199,7 +200,7 @@ def scarab_input(df_scenarios, scenario_name):
                 
             # import and wrangle trajectory data (in trj.hst)
             if os.path.isfile(trj_path):
-                df_trj = pd.read_csv(trj_path, skiprows=28, sep="\s+",
+                df_trj = pd.read_csv(trj_path, skiprows=28, sep="\\s+",
                                      names=['TIME[S]', 'H[M]', 'LT[DEG]', 'LG[DEG]', 'V[M/S]', 'GM[DEG]', 'PS[DEG]', 'TRK[KM]'])
                 df_trj['H[M]'] = df_trj['H[M]']/1000
                 df_trj.rename(columns={'H[M]': 'ALT[KM]'}, inplace=True)
@@ -208,7 +209,7 @@ def scarab_input(df_scenarios, scenario_name):
             
             # import and wrangle temperature and heat flux data (in tqm.hst)
             if os.path.isfile(tqm_path):
-                df_tqm = pd.read_csv(tqm_path, skiprows=3, sep="\s+", 
+                df_tqm = pd.read_csv(tqm_path, skiprows=3, sep="\\s+", 
                                      names=['TIME[S]', 'ALT[KM]', 'DST[KM]', 'T_MAX[K]', 'Q_MAX[W/M2]', 'Q_AVG[W/M2]', 'Q_SUM[W]', 'Q_TOT[J]',
                                             'unknown1', 'unknown2', 'unknown3', 'unknown4'])
                 df_tqm = df_tqm[['TIME[S]', 'ALT[KM]', 'DST[KM]', 'T_MAX[K]', 'Q_MAX[W/M2]', 'Q_AVG[W/M2]', 'Q_SUM[W]', 'Q_TOT[J]']]
@@ -218,7 +219,7 @@ def scarab_input(df_scenarios, scenario_name):
                 
             # import and wrangle data containing information about the projected surface area in the direction of flight (in arshad.hst)
             if os.path.isfile(arshad_path):
-                df_area = pd.read_csv(arshad_path, sep="\s+",
+                df_area = pd.read_csv(arshad_path, sep="\\s+",
                                      names=['TIME[S]', 'UNKNOWN', 'PROJ_AREA[M^2]'])
             else:
                 print('No arshad.hst file found in ', fragment_path)
@@ -645,8 +646,8 @@ def compress_trajaerodata_dataframe(df_trajaerodata, compress_method, compress_i
 
         # Define aggregation rules
         agg_dict = {
-            'Time [s]': 'last',
-            'Altitude [km]': 'last',
+            'Time [s]': 'first',
+            'Altitude [km]': 'first',
             'Lat [deg]': 'last',
             'Lon [deg]': 'last',
             'Velocity [km/s]': 'last',
@@ -921,14 +922,14 @@ def emission_preprocessing_data(df_trajectory_results, df_phases):
     return df_cleaned       
 
 # Saving the Results of the Emission Calculations
-def save_emission_results(emission_results, scenario_name):
+def save_emission_results(emission_results, scenario_name,calculation_method):
     # Saving data to csv file
     try:
         if emission_results is None or not isinstance(emission_results, pd.DataFrame):
             raise ValueError("Emission results are not valid DataFrame")
         
         # Saving data to csv file
-        base_name = f"{output_data_emissions_name}{scenario_name}"
+        base_name = f"{output_data_emissions_name}{scenario_name}_{calculation_method}"
         filename, file_path = get_unique_filename(base_name, output_data_folder_path_nasa_cea, ".csv")
         
         emission_results.to_csv(file_path, index=False)
@@ -943,8 +944,8 @@ def save_emission_results(emission_results, scenario_name):
 
 def filter_emission_data(df, compress_method, compress_interval, compress_lat, compress_lon):
     required_columns = ['Time [s]', 'Altitude [km]', 'Lat [deg]', 'Lon [deg]', 
-                        'Velocity [km/s]', 'Downrange [km]', 'Datetime', 'd_m [kg]']
-    species_columns = df.columns[df.columns.get_loc('ReferenceArea [m^2]') + 1:].tolist()
+                        'Velocity [km/s]', 'Datetime', 'scenario', 'reentry_vehicle', 'd_m [kg]']
+    species_columns = df.columns[df.columns.get_loc('reentry_vehicle') + 1:].tolist()
     
     if not all(col in df.columns for col in required_columns):
         raise ValueError("Input DataFrame is missing required columns.")
@@ -965,14 +966,28 @@ def filter_emission_data(df, compress_method, compress_interval, compress_lat, c
     df_copy['Lon [deg]'] = (df_copy['Lon [deg]'] // compress_lon) * compress_lon
     
     # Group by the rounded values and aggregate the species columns by sum
-    df_grouped = df_copy.groupby(['Time [s]', 'Altitude [km]', 'Lat [deg]', 'Lon [deg]']).agg({
+    df_grouped = df_copy.groupby(
+        ['Time [s]', 'Altitude [km]', 'Lat [deg]', 'Lon [deg]']
+    ).agg({
         'Velocity [km/s]': 'mean',
         'Downrange [km]': 'mean',
         'Temp [K]': 'mean',
         'Datetime': 'first',
+        'scenario': 'first',
+        'reentry_vehicle': 'first',
         'd_m [kg]': 'sum',
         **{col: 'sum' for col in species_columns}
     }).reset_index()
+
+    df_grouped['total_sum_emissions'] = df_grouped[species_columns].sum(axis=1)
+
+    # Remove rows with 0 emissions
+    df_grouped = df_grouped.loc[df_grouped['total_sum_emissions'] > 0]
+
+    cols = list(df_grouped.columns)
+    dm_index = cols.index('d_m [kg]')
+    cols.insert(dm_index + 1, cols.pop(cols.index('total_sum_emissions')))
+    df_grouped = df_grouped[cols]
     
     return df_grouped
 
@@ -1006,14 +1021,14 @@ def filter_emission_data_bal(df, compress_method, compress_interval, compress_la
     }).reset_index()
     
     # Add the 'sum' column as the total of all species columns
-    df_grouped['sum'] = df_grouped[species_columns].sum(axis=1)
+    df_grouped['total_sum_species'] = df_grouped[species_columns].sum(axis=1)
     
     # Merge the 'date' column back into the grouped DataFrame (if 'date' exists)
     if 'date' in df.columns:
         df_grouped = pd.merge(df_grouped, df_copy[['Time [s]', 'date']].drop_duplicates(), on='Time [s]', how='left')
     
     # Keep only the required columns, species columns, and the 'sum' column
-    columns_to_keep = required_columns + species_columns + ['sum']
+    columns_to_keep = required_columns + species_columns + ['total_sum_species']
 
     df_filtered = df_grouped[columns_to_keep]
 
@@ -1083,7 +1098,6 @@ def calculate_atmosphere_data(row):
 
     # Calculate speed of sound (m/s)
     #print(R)
-    kappa = 1.4  # Ratio of specific heats for air
     c_atm = np.sqrt(kappa * R * t_atm)
     
     return rho_atm, t_atm, p_atm, c_atm, df_atm_massfractions, df_atm_molarfractions

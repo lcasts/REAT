@@ -111,7 +111,7 @@ Jan-Steffen Fischer and Sebastian Winterhoff and Stefanos Fasoulas, Re-entry Emi
 │   ├── emission_factors.xlsx
 │   ├── material_data.xlsx
 │   ├── scenarios.xlsx
-│   └── trajectory.csv          # Optional
+│   └── example_trajectories.csv          # Optional
 ├── NASA_CEA/                   # NASA CEA tool and related files
 ├── output_data/                # Folder for storing output results
 │   ├── data_raw/               # Raw output files
