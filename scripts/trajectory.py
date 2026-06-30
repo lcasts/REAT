@@ -91,7 +91,7 @@ def coordinates(inc, lat_1, lon_1, dx):
     inc = np.radians(inc)
     c = ((dx/(R_0*2*np.pi))*360)*np.pi/180
 
-    #spärische Trigonometrie, Regel von Neper
+    #spherical trigonometry, Napier's rule
     #a = delta lon b = delta lat
 
     #tan(a) = tan(c)*cos(beta)
@@ -413,8 +413,6 @@ def pydrama(df_scenarios,scenario_name):
     try:
         # Generic Model Folder & Files
         valid_generic_models = {
-            "Ariane_Fixed": "Ariane_Fixed",
-            "Ariane_Tumbling": "Ariane_Tumbling",
             "F9_Fixed": "F9_Fixed",
             "F9_Tumbling": "F9_Tumbling",
             "GM1_Fixed": "GM1_Fixed",
@@ -459,7 +457,7 @@ def pydrama(df_scenarios,scenario_name):
     # 03 - Update Scenario Model Data
     try:
         if generic_model in ("GM1_Tumbling", "GM1_Fixed"):
-            gm_total_mass = 5300.0                  # Generic model total mass
+            gm_total_mass = 6000.0                  # Generic model total mass
             gm_total_height = 11.6                  # Generic model height
             gm_total_length = 5.4                   # Generic model length
             gm_total_width = 5.4                    # Generic model width
@@ -482,43 +480,43 @@ def pydrama(df_scenarios,scenario_name):
                             obj.find("primitive/ring/radius").text = str((2.7/gm_total_radius) * sc_radius)
                             obj.find("primitive/ring/length").text = str((5.8/gm_total_height) * sc_height)
                             obj.find("primitive/ring/innerRadius").text = str((2.65/gm_total_radius) * sc_radius)
-                            obj.find("mass").text = str((900.0/gm_total_mass) * sc_mass)
+                            obj.find("mass").text = str((1019.8300283478721/gm_total_mass) * sc_mass)
                             obj.find("relativePosition/cartX").text = str((4.0/gm_total_height) * sc_height)
 
                         if name == "LH2Tank - AA2219":
                             obj.find("primitive/sphere/radius").text = str((2.7/gm_total_radius) * sc_radius)
-                            obj.find("mass").text = str((1087.287974/gm_total_mass) * sc_mass)
+                            obj.find("mass").text = str((1232.054361496356/gm_total_mass) * sc_mass)
                             obj.find("relativePosition/cartX").text = str((2.7/gm_total_height) * sc_height)
 
                         if name == "LOXTank - AA2219":
                             obj.find("primitive/sphere/radius").text = str((1.75/gm_total_radius) * sc_radius)
-                            obj.find("mass").text = str((412.7120259/gm_total_mass) * sc_mass)
+                            obj.find("mass").text = str((467.6623523034497/gm_total_mass) * sc_mass)
                             obj.find("relativePosition/cartX").text = str((6.5/gm_total_height) * sc_height)
 
                         if name == "TF - AA7075":
                             obj.find("primitive/cone/radius").text = str((2.4/gm_total_radius) * sc_radius)
                             obj.find("primitive/cone/height").text = str((1.8/gm_total_height) * sc_height)
-                            obj.find("mass").text = str((300.0/gm_total_mass) * sc_mass)
+                            obj.find("mass").text = str((339.94334278262403/gm_total_mass) * sc_mass)
                             obj.find("relativePosition/cartX").text = str((7.6/gm_total_height) * sc_height)
 
                         if name == "VINCIeng - Inconel718_Cu":
                             obj.find("primitive/ring/radius").text = str((0.125/gm_total_radius) * sc_radius)
                             obj.find("primitive/ring/length").text = str((0.75/gm_total_height) * sc_height)
                             obj.find("primitive/ring/innerRadius").text = str((0.075/gm_total_radius) * sc_radius)
-                            obj.find("mass").text = str((510.0/gm_total_mass) * sc_mass)
+                            obj.find("mass").text = str((203.96600566957443/gm_total_mass) * sc_mass)
                             obj.find("relativePosition/cartX").text = str((9.125/gm_total_height) * sc_height)
 
                         if name == "VINCInozzle - CC":
                             obj.find("primitive/cone/radius").text = str((0.9/gm_total_radius) * sc_radius)
                             obj.find("primitive/cone/height").text = str((2.3/gm_total_height) * sc_height)
-                            obj.find("mass").text = str((90.0/gm_total_mass) * sc_mass)
+                            obj.find("mass").text = str((475.92067989567363/gm_total_mass) * sc_mass)
                             obj.find("relativePosition/cartX").text = str((10.7/gm_total_height) * sc_height)
 
                         if name == "Electronics1 - Elec":
                             obj.find("primitive/box/width").text = str((0.8/gm_total_width) * sc_width)
                             obj.find("primitive/box/height").text = str((0.8/gm_total_height) * sc_height)
                             obj.find("primitive/box/length").text = str((1.7/gm_total_length) * sc_length)
-                            obj.find("mass").text = str((300.0/gm_total_mass) * sc_mass)
+                            obj.find("mass").text = str((339.94334278262403/gm_total_mass) * sc_mass)
                             obj.find("relativePosition/cartX").text = str((5.0/gm_total_height) * sc_height)
                             obj.find("relativePosition/cartY").text = str((2.2/gm_total_radius) * sc_radius)
 
@@ -526,26 +524,26 @@ def pydrama(df_scenarios,scenario_name):
                             obj.find("primitive/box/width").text = str((0.8/gm_total_width) * sc_width)
                             obj.find("primitive/box/height").text = str((0.8/gm_total_height) * sc_height)
                             obj.find("primitive/box/length").text = str((1.7/gm_total_length) * sc_length)
-                            obj.find("mass").text = str((300.0/gm_total_mass) * sc_mass)
+                            obj.find("mass").text = str((339.94334278262403/gm_total_mass) * sc_mass)
                             obj.find("relativePosition/cartX").text = str((5.0/gm_total_height) * sc_height)
                             obj.find("relativePosition/cartY").text = str((-2.2/gm_total_radius) * sc_radius)
 
-                        if name == "Fluidics - A316L":
+                        if name == "Fluidics - A316":
                             obj.find("primitive/ring/radius").text = str((0.25/gm_total_radius) * sc_radius)
                             obj.find("primitive/ring/length").text = str((1.0/gm_total_height) * sc_height)
                             obj.find("primitive/ring/innerRadius").text = str((0.125/gm_total_radius) * sc_radius)
-                            obj.find("mass").text = str((420.0/gm_total_mass) * sc_mass)
+                            obj.find("mass").text = str((475.92067989567363/gm_total_mass) * sc_mass)
                             obj.find("relativePosition/cartX").text = str((8.7/gm_total_height) * sc_height)
 
                         if name == "HeHPV1 - CFRP_AA7075":
                             obj.find("primitive/sphere/radius").text = str((0.635/gm_total_radius) * sc_radius)
-                            obj.find("mass").text = str((90.0/gm_total_mass) * sc_mass)
+                            obj.find("mass").text = str((101.98300283478721/gm_total_mass) * sc_mass)
                             obj.find("relativePosition/cartX").text = str((8.4/gm_total_height) * sc_height)
                             obj.find("relativePosition/cartZ").text = str((1.5/gm_total_radius) * sc_radius)
 
                         if name == "HeHPV2 - CFRP_AA7075":
                             obj.find("primitive/sphere/radius").text = str((0.635/gm_total_radius) * sc_radius)
-                            obj.find("mass").text = str((90.0/gm_total_mass) * sc_mass)
+                            obj.find("mass").text = str((101.98300283478721/gm_total_mass) * sc_mass)
                             obj.find("relativePosition/cartX").text = str((8.4/gm_total_height) * sc_height)
                             obj.find("relativePosition/cartZ").text = str((-1.5/gm_total_radius) * sc_radius)
 
@@ -553,13 +551,13 @@ def pydrama(df_scenarios,scenario_name):
                             obj.find("primitive/ring/radius").text = str((2.65/gm_total_radius) * sc_radius)
                             obj.find("primitive/ring/length").text = str((1.5/gm_total_height) * sc_height)
                             obj.find("primitive/ring/innerRadius").text = str((2.6/gm_total_radius) * sc_radius)
-                            obj.find("mass").text = str((300.0/gm_total_mass) * sc_mass)
+                            obj.find("mass").text = str((339.94334278262403/gm_total_mass) * sc_mass)
                             obj.find("relativePosition/cartX").text = str((6.0/gm_total_height) * sc_height)
 
                         if name == "LVA - CFRP_AA7075":
                             obj.find("primitive/cone/radius").text = str((2.3/gm_total_radius) * sc_radius)
                             obj.find("primitive/cone/height").text = str((2.0/gm_total_height) * sc_height)
-                            obj.find("mass").text = str((500.0/gm_total_mass) * sc_mass)
+                            obj.find("mass").text = str((560.9065155913297/gm_total_mass) * sc_mass)
                             obj.find("relativePosition/cartX").text = str((0.45/gm_total_height) * sc_height)
 
                     # Save updated XML to the Scenario file
@@ -692,8 +690,8 @@ def pydrama(df_scenarios,scenario_name):
                 # Copy materials.xml and sara.xml
                 else:
                     shutil.copy2(gm_file, sc_file)
-    
-        if generic_model in ("F9_Tumbling", "F9_Fixed", "Ariane_Tumbling", "Ariane_Fixed"):
+
+        if generic_model in ("F9_Tumbling", "F9_Fixed"):
             for key, gm_file in gm_input_file_paths.items():
                 sc_file = sc_input_file_paths[key]
                 shutil.copy2(gm_file, sc_file)
