@@ -1449,21 +1449,21 @@ def run_nasa_cea(df_trajaerodata, df_emission_factors, df_material_data, scenari
                         r = Pr_lam**(1/2)
                         t_aw = hotgas_temp_static * (1 + r * ((kappa-1)/2) * mach_2**2)
                         t_ab = hotgas_temp_static + 0.5 * (t_mat - hotgas_temp_static) + 0.22 * (t_aw - hotgas_temp_static)
-                        #print('Eckert:',t_ab,'K')
+                        #print('T_Eckert:',t_ab,'K')
 
                     elif temp_factor == "eckert_turb":
                         r = Pr_lam**(1/3)
                         t_aw = hotgas_temp_static * (1 + r * ((kappa-1)/2) * mach_2**2)
                         t_ab = hotgas_temp_static + 0.5 * (t_mat - hotgas_temp_static) + 0.22 * (t_aw - hotgas_temp_static)
-                        #print('Eckert:',t_ab,'K')
+                        #print('T_Eckert:',t_ab,'K')
 
                     elif temp_factor == "roberts_lam":
-                        t_ab = t_mat + (1-(1/3)*(Pr_lam)**(-0.6))*(hotgas_temp_static - t_mat)
-                        #print('Roberts:',t_ab,'K')
+                        t_ab = t_mat + (1-(1/3)*(Pr_lam)**(-0.6))*(hotgas_t_stag - t_mat)
+                        #print('T_Roberts:',t_ab,'K')
                     
                     elif temp_factor == "roberts_turb":
-                        t_ab = t_mat + (1-(1/3)*(Pr_turb)**(-0.6))*(hotgas_temp_static - t_mat)
-                        #print('Roberts:',t_ab,'K')
+                        t_ab = t_mat + (1-(1/3)*(Pr_turb)**(-0.6))*(hotgas_t_stag - t_mat)
+                        #print('T_Roberts:',t_ab,'K')
 
                     elif isinstance(temp_factor, (int, float)):
                         t_ab = t_mat + temp_factor * (hotgas_temp_static - t_mat)
