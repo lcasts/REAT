@@ -52,7 +52,7 @@ def main():
                 continue  # skip to the next scenario
 
             # Apply compression where applicable (but only if not already compressed inside a branch)
-            if traj_inp_data in {"OwnDrama", "PyDrama"} and compress_data:
+            if traj_inp_data in {"OwnDrama", "PyDrama", "OwnDebrisk"} and compress_data:
                 df_trajaerodata = data_processing.compress_trajaerodata_dataframe(
                     df_trajaerodata,
                     compress_method,

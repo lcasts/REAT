@@ -127,11 +127,71 @@ def drama_input(df_scenarios,scenario_name, pydrama_results_folder=None):
         print("No valid results were generated.")
         return df_trajaerodata
 
+# Parse a SCARAB fragment's material.lst into a {column_number: material_name} map.
+# The column numbering in masmat.hst is fragment-specific, so this must be re-parsed per fragment.
+def parse_scarab_material_list(fragment_path):
+    material_list_path = os.path.join(fragment_path, 'material.lst')
+    material_map = {}
+    if not os.path.isfile(material_list_path):
+        return material_map
+    with open(material_list_path, 'r') as f:
+        for line in f:
+            match = re.match(r'^\s*(\d+)\s+(\S+)', line)
+            if match:
+                material_map[match.group(1)] = match.group(2)
+    return material_map
+
+# Fallback merge for SCARAB per-fragment time series on TIME[S], tolerating small cross-file
+# floating point precision differences: tqm.hst and masmat.hst only write 3 decimal digits while
+# mas.hst/trj.hst/arshad.hst keep full double precision, so an exact-equality merge can silently
+# drop rows (or, for very short-lived fragments, all of them) whenever two real timesteps round to
+# the same 3-decimal value. Only used when the exact merge comes back empty (see build_fragment_df).
+def merge_asof_on_time(left, right, tolerance=0.005):
+    left = left.sort_values('TIME[S]')
+    right = right.sort_values('TIME[S]')
+    right_cols = [c for c in right.columns if c != 'TIME[S]']
+    merged = pd.merge_asof(left, right, on='TIME[S]', direction='nearest', tolerance=tolerance)
+    # merge_asof is a left join (unmatched rows get NaN); drop those to keep the original
+    # inner-join semantics (only keep timesteps present, within tolerance, in both series)
+    return merged.dropna(subset=right_cols)
+
+def merge_exact_on_time(left, right):
+    return pd.merge(left, right, on='TIME[S]')
+
+# Build a single fragment's merged dataframe from its raw per-file series, using the given merge
+# function (exact or tolerant) for every step of the chain.
+def build_fragment_df(merge_fn, df_mas, df_tqm, df_trj, df_area, df_masmat):
+    df_mastqm = merge_fn(df_mas[['TIME[S]', 'MASS[KG]']],
+                         df_tqm[['TIME[S]', 'T_MAX[K]']])
+    df_mastqmtrj = merge_fn(df_mastqm[['TIME[S]', 'MASS[KG]', 'T_MAX[K]']],
+                            df_trj[['TIME[S]', 'ALT[KM]', 'LT[DEG]', 'LG[DEG]', 'V[M/S]', 'TRK[KM]']])
+    df_mastqmtrjarea = merge_fn(df_mastqmtrj[['TIME[S]', 'MASS[KG]', 'T_MAX[K]',
+                                              'ALT[KM]', 'LT[DEG]', 'LG[DEG]', 'V[M/S]', 'TRK[KM]']],
+                                df_area[['TIME[S]', 'PROJ_AREA[M^2]']])
+    df_frag = merge_fn(df_mastqmtrjarea[['TIME[S]', 'MASS[KG]', 'T_MAX[K]',
+                                         'ALT[KM]', 'LT[DEG]', 'LG[DEG]', 'V[M/S]', 'TRK[KM]',
+                                         'PROJ_AREA[M^2]']],
+                       df_masmat)
+    return df_frag
+
+# Maps raw SCARAB material.lst names to the material names used in emission_factors.xlsx / material_data.xlsx
+SCARAB_MATERIAL_NAME_MAP = {
+    'aa7075'            : 'AA7075',
+    'cfrp-m56-ud134'    : 'CFRP',
+    'aa2195'            : 'AA2195',
+    'copper'            : 'Cu',
+    'cc-sic-ceramic'    : 'CCSic',
+    'a316'              : 'A316',
+    'inconel718'        : 'Inconel718',
+    'aa2219'            : 'AA2219',
+    'drama-tial6v4'     : 'Ti6Al4V',
+}
+
 # Import Scarab Files
 def scarab_input(df_scenarios, scenario_name):
-    # locate simulation data according to config.py and scenarios.xlsx (file_name_scenarios)
+    # locate simulation data according to config.py (file_name_ext_trajectory)
     reentry_vehicle = df_scenarios.loc[scenario_name, 'reentry_vehicle']
-    scenario_folder_path = os.path.join(input_data_folder_path, scenario_name)
+    scenario_folder_path = file_name_ext_trajectory
 
     if not os.path.exists(scenario_folder_path):
         print(colors.BOLD + colors.RED + f"Warning: Scenario folder '{scenario_folder_path}' not found." + colors.END)
@@ -173,18 +233,24 @@ def scarab_input(df_scenarios, scenario_name):
             tqm_path = os.path.join(fragment_path, 'tqm.hst')
             arshad_path = os.path.join(fragment_path, 'arshad.hst')
             
-            # import and wrangle masmat data (in masmat.hst)          
+            # import and wrangle masmat data (in masmat.hst)
+            # masmat.hst's header holds numeric column IDs (1, 2, 3, ...), not material names;
+            # the actual ID -> material name mapping lives in the fragment's own material.lst
+            # and differs between fragments, so it must be resolved here, per fragment.
             if os.path.isfile(masmat_path):
                 with open(masmat_path, 'r') as f:
                     lines = f.readlines()
                     lines = lines[2:]
-                    lines[0] = lines[0].split('#')[-1]      
-                    if 'cfrp-m56-ud1copper' in lines[0]:    
-                        lines[0] = lines[0].replace("cfrp-m56-ud1copper", "cfrp-m56-ud1 copper")
-                    if 'cc-sic-cerama316' in lines[0]:
-                        lines[0] = lines[0].replace("cc-sic-cerama316", "cc-sic-ceram a316")                        
+                    lines[0] = lines[0].split('#')[-1]
                     df_masmat = pd.read_csv(StringIO(''.join(lines)), sep="\\s+", header=0)
                 df_masmat.rename(columns={'TIME_[S]': 'TIME[S]'}, inplace=True)
+                df_masmat['TIME[S]'] = df_masmat['TIME[S]'].round(4)
+
+                material_map = parse_scarab_material_list(fragment_path)
+                df_masmat.rename(columns=material_map, inplace=True)
+                unmapped_cols = [c for c in df_masmat.columns if c != 'TIME[S]' and c.isdigit()]
+                if unmapped_cols:
+                    print(f"Warning: masmat.hst columns {unmapped_cols} in '{fragment_path}' have no matching entry in material.lst.")
             else:
                 print('No masmat.hst file found in ', fragment_path)
             
@@ -195,58 +261,46 @@ def scarab_input(df_scenarios, scenario_name):
                 df_mas.rename(columns={'TIME': 'TIME[S]'}, inplace=True)
                 df_mas.rename(columns={'ALT': 'ALT[KM]'}, inplace=True)
                 df_mas.rename(columns={'MASS': 'MASS[KG]'}, inplace=True)
+                df_mas['TIME[S]'] = df_mas['TIME[S]'].round(4)
             else:
                 print('No mas.hst file found in ', fragment_path)
-                
+
             # import and wrangle trajectory data (in trj.hst)
             if os.path.isfile(trj_path):
                 df_trj = pd.read_csv(trj_path, skiprows=28, sep="\\s+",
                                      names=['TIME[S]', 'H[M]', 'LT[DEG]', 'LG[DEG]', 'V[M/S]', 'GM[DEG]', 'PS[DEG]', 'TRK[KM]'])
                 df_trj['H[M]'] = df_trj['H[M]']/1000
                 df_trj.rename(columns={'H[M]': 'ALT[KM]'}, inplace=True)
+                df_trj['TIME[S]'] = df_trj['TIME[S]'].round(4)
             else:
                 print('No trj.hst file found in ', fragment_path)
-            
+
             # import and wrangle temperature and heat flux data (in tqm.hst)
             if os.path.isfile(tqm_path):
-                df_tqm = pd.read_csv(tqm_path, skiprows=3, sep="\\s+", 
+                df_tqm = pd.read_csv(tqm_path, skiprows=3, sep="\\s+",
                                      names=['TIME[S]', 'ALT[KM]', 'DST[KM]', 'T_MAX[K]', 'Q_MAX[W/M2]', 'Q_AVG[W/M2]', 'Q_SUM[W]', 'Q_TOT[J]',
                                             'unknown1', 'unknown2', 'unknown3', 'unknown4'])
                 df_tqm = df_tqm[['TIME[S]', 'ALT[KM]', 'DST[KM]', 'T_MAX[K]', 'Q_MAX[W/M2]', 'Q_AVG[W/M2]', 'Q_SUM[W]', 'Q_TOT[J]']]
                 df_tqm.rename(columns={'DST[KM]': 'TRK[KM]'}, inplace=True)
+                df_tqm['TIME[S]'] = df_tqm['TIME[S]'].round(4)
             else:
                 print('No tqm.hst file found in ', fragment_path)
-                
+
             # import and wrangle data containing information about the projected surface area in the direction of flight (in arshad.hst)
             if os.path.isfile(arshad_path):
                 df_area = pd.read_csv(arshad_path, sep="\\s+",
                                      names=['TIME[S]', 'UNKNOWN', 'PROJ_AREA[M^2]'])
+                df_area['TIME[S]'] = df_area['TIME[S]'].round(4)
             else:
                 print('No arshad.hst file found in ', fragment_path)
             
             
-            # merge all the data for a fragment
-            # df_mastqm = pd.merge(df_mas[['TIME[S]', 'MASS[KG]']],
-            #                      df_tqm[['TIME[S]' ,'T_MAX[K]', 'Q_MAX[W/M2]']],
-            #                      on='TIME[S]')
-            df_mastqm = pd.merge(df_mas[['TIME[S]', 'MASS[KG]']],
-                                 df_tqm[['TIME[S]' ,'T_MAX[K]']],
-                                 on='TIME[S]')
-            df_mastqmtrj = pd.merge(df_mastqm[['TIME[S]', 'MASS[KG]', 
-                                               'T_MAX[K]']], # 'Q_MAX[W/M2]'
-                                    df_trj[['TIME[S]' ,'ALT[KM]', 'LT[DEG]', 'LG[DEG]', 'V[M/S]', 'TRK[KM]']],
-                                    on='TIME[S]')
-            df_mastqmtrjarea = pd.merge(df_mastqmtrj[['TIME[S]', 'MASS[KG]',
-                                                      'T_MAX[K]', # 'Q_MAX[W/M2]'
-                                                      'ALT[KM]', 'LT[DEG]', 'LG[DEG]', 'V[M/S]', 'TRK[KM]']],
-                                    df_area[['TIME[S]', 'PROJ_AREA[M^2]']],
-                                    on='TIME[S]')
-            df_frag = pd.merge(df_mastqmtrjarea[['TIME[S]', 'MASS[KG]',
-                                                 'T_MAX[K]', # 'Q_MAX[W/M2]'
-                                                 'ALT[KM]', 'LT[DEG]', 'LG[DEG]', 'V[M/S]', 'TRK[KM]', 
-                                                 'PROJ_AREA[M^2]']], 
-                               df_masmat, 
-                               on='TIME[S]')
+            # merge all the data for a fragment: exact time match first; only fragments where that
+            # comes back empty (very short-lived fragments hitting the tqm.hst/masmat.hst 3-decimal
+            # precision limit, see build_fragment_df) get retried with a tolerant nearest-match merge
+            df_frag = build_fragment_df(merge_exact_on_time, df_mas, df_tqm, df_trj, df_area, df_masmat)
+            if df_frag.empty:
+                df_frag = build_fragment_df(merge_asof_on_time, df_mas, df_tqm, df_trj, df_area, df_masmat)
             df_frag['frag_id'] = str(folder)
             
             # compute change in mass (dm: mass of the current time step - mass of the former time step)
@@ -279,10 +333,6 @@ def scarab_input(df_scenarios, scenario_name):
     reentry_time = datetime.fromisoformat(reentry_time)
     df_fragments['DATETIME'] = df_fragments['TIME[S]'].apply(lambda x: reentry_time + timedelta(seconds=x))
     
-    # rename columns of materials 
-    df_fragments.rename(columns={'cfrp-m56-ud1': 'cfrp-m56-ud134',
-                                 'cc-sic-ceram': 'cc-sic-ceramic'}, inplace=True)
-    
     # rename columns, similar to Drama
     df_fragments['V[M/S]'] = df_fragments['V[M/S]']/1000.0
     df_fragments.rename(columns={'V[M/S]'           : 'V[KM/S]'}, inplace=True)
@@ -301,28 +351,80 @@ def scarab_input(df_scenarios, scenario_name):
                                  'status'           : 'Status',
                                  'DATETIME'         : 'Datetime'}, inplace=True)
     
-    # rename material columns to match the material names in material_data.xlsx
-    df_fragments.rename(columns={'aa7075'           : 'AA7075 [kg]',
-                                 'cfrp-m56-ud134'   : 'CFRP [kg]',
-                                 'aa2195'           : 'AA2195 [kg]',
-                                 'copper'           : 'Cu [kg]',
-                                 'cc-sic-ceramic'   : 'CCSic [kg]',
-                                 'a316'             : 'A316 [kg]',
-                                 'inconel718'       : 'Inconel718 [kg]',
-                                 }, inplace=True)
-    
+    # rename material columns to match the material names in emission_factors.xlsx / material_data.xlsx
+    # any raw material.lst name not covered by SCARAB_MATERIAL_NAME_MAP is kept as-is (flagged below) instead of being dropped
+    known_raw_materials = [c for c in df_fragments.columns if c in SCARAB_MATERIAL_NAME_MAP]
+    reserved_cols = {'Time [s]', 'Total Fragment Mass [kg]', 'Temp [K]', 'Altitude [km]', 'Lat [deg]', 'Lon [deg]',
+                      'Velocity [km/s]', 'Downrange [km]', 'ReferenceArea [m^2]', 'FragmentID', 'd_m [kg]', 'Status', 'Datetime'}
+    unmapped_raw_materials = [c for c in df_fragments.columns
+                              if c not in reserved_cols and c not in SCARAB_MATERIAL_NAME_MAP and not c.startswith('d_m ')]
+    if unmapped_raw_materials:
+        print(colors.BOLD + colors.YELLOW +
+              f"Warning: materials {unmapped_raw_materials} are not in SCARAB_MATERIAL_NAME_MAP; "
+              f"keeping raw names, add them to the map in data_processing.py to align with emission_factors.xlsx." + colors.END)
+
+    material_rename = {raw: f'{SCARAB_MATERIAL_NAME_MAP[raw]} [kg]' for raw in known_raw_materials}
+    material_rename.update({raw: f'{raw} [kg]' for raw in unmapped_raw_materials})
+    df_fragments.rename(columns=material_rename, inplace=True)
+    material_cols = sorted(material_rename.values())
+
     # compute change in material mass for every material (dm: material mass of the current time step - material mass of the former time step)
     df_fragments = df_fragments.sort_values(by=['FragmentID', 'Time [s]'])
-    for col in df_fragments.columns:
-        if col in ['AA7075 [kg]', 'CFRP [kg]', 'AA2195 [kg]', 'Cu [kg]', 'CCSic [kg]', 'A316 [kg]', 'Inconel718 [kg]']:
-            df_fragments[f'd_m {col}'] = df_fragments.groupby(['FragmentID'])[col].diff().abs()
-    
+
+    # masmat.hst reports a material's mass as 0 in the LAST row of any fragment that goes on to
+    # fragment further (frag.lst status "Fragmentation"): that mass isn't ablated there, it is
+    # handed off whole to a child fragment (which "reappears" with the same value in its own
+    # first row). Naively diffing would misread that handoff as ablation, and along a chain of
+    # single-child fragmentations the same mass gets re-counted as "lost" at every link. Suppress
+    # the diff into that specific handoff row (Demise/Ground Impact rows are genuine and unaffected).
+    frag_status = df_frag_list.set_index('frag_id')['status']
+    is_last_row = df_fragments['Time [s]'] == df_fragments.groupby('FragmentID')['Time [s]'].transform('max')
+    is_handoff_row = is_last_row & df_fragments['FragmentID'].map(frag_status).eq('Fragmentation')
+
+    # "Birth gap": a fragmenting parent's last recorded total mass is usually a bit higher than the
+    # combined first recorded mass of its children - the difference is real ablation that happened
+    # around the fragmentation event, but it falls into a gap neither side's own d_m diff covers
+    # (the parent's last diff only covers the step before; a child's first row gets no diff at all,
+    # since there is no earlier row of its own to compare against). Attribute that gap mass to the
+    # parent's handoff row so total ablated mass is conserved end to end.
+    first_mass_by_frag = df_fragments.groupby('FragmentID')['Total Fragment Mass [kg]'].first()
+    children_by_parent = df_frag_list.loc[df_frag_list['parent'] != '-'].groupby('parent')['frag_id'].apply(list)
+    for parent_id, children in children_by_parent.items():
+        if frag_status.get(parent_id) != 'Fragmentation':
+            continue
+        parent_mask = is_handoff_row & (df_fragments['FragmentID'] == parent_id)
+        if not parent_mask.any():
+            continue
+        children_first_sum = sum(first_mass_by_frag.get(c, 0.0) for c in children)
+        gap = df_fragments.loc[parent_mask, 'Total Fragment Mass [kg]'].iloc[0] - children_first_sum
+        if gap > 0:
+            df_fragments.loc[parent_mask, 'd_m [kg]'] = df_fragments.loc[parent_mask, 'd_m [kg]'].fillna(0) + gap
+
+    # At a handoff row, masmat.hst reports every material as 0 (the fragmentation-boundary format
+    # artifact described above) even though the row's Total Fragment Mass shows a normal, real
+    # step of ablation - the same kind of loss as any other row, just not attributed per material
+    # by the file itself. A plain diff would misread that as the entire last known material mass
+    # ablating in one step; simply zeroing it (as before) is safe but throws the real mass away.
+    # Attribute it instead to each material in proportion to the parent's own material composition
+    # one row earlier - a defensible estimate, since composition rarely shifts much within a single
+    # ~1s step. Covers ~99.9% of this scenario's previously-unattributed handoff-row mass.
+    prev_material = df_fragments.groupby('FragmentID')[material_cols].shift(1)
+    prev_material_sum = prev_material.sum(axis=1)
+    handoff_total_dm = df_fragments['d_m [kg]']  # already includes the birth-gap addition above
+
+    for col in material_cols:
+        dm_col = f'd_m {col}'
+        df_fragments[dm_col] = df_fragments.groupby(['FragmentID'])[col].diff().abs()
+
+        frac = (prev_material[col] / prev_material_sum).where(prev_material_sum > 0, 0.0)
+        df_fragments.loc[is_handoff_row, dm_col] = (handoff_total_dm * frac).loc[is_handoff_row]
+
     # reorder dataframe
+    dm_material_cols = [f'd_m {col}' for col in material_cols]
     df_fragments = df_fragments[[
         "Time [s]", "Altitude [km]", "Lat [deg]", "Lon [deg]", "Velocity [km/s]", "Downrange [km]", "Total Fragment Mass [kg]",
-        "Temp [K]", "Datetime", "d_m [kg]", "FragmentID", "ReferenceArea [m^2]", 
-        "AA7075 [kg]", "CFRP [kg]", "AA2195 [kg]", "Cu [kg]", "CCSic [kg]", "A316 [kg]", "Inconel718 [kg]", 
-        "d_m AA7075 [kg]", "d_m CFRP [kg]", "d_m AA2195 [kg]", "d_m Cu [kg]", "d_m CCSic [kg]", "d_m A316 [kg]", "d_m Inconel718 [kg]"
+        "Temp [K]", "Datetime", "d_m [kg]", "FragmentID", "ReferenceArea [m^2]",
+        *material_cols, *dm_material_cols
         ]]
     
     # add scenario and reentry_vehicle
@@ -337,14 +439,20 @@ def scarab_input(df_scenarios, scenario_name):
     
 # Import Debrisk Files
 def debrisk_input(df_scenarios, scenario_name):
-    # locate simulation data according to config.py and scenarios.xlsx (file_name_scenarios)
+    # locate simulation data according to config.py (file_name_ext_trajectory)
     reentry_vehicle = df_scenarios.loc[scenario_name, 'reentry_vehicle']
-    scenario_folder_path = os.path.join(input_data_folder_path, scenario_name)
+    scenario_folder_path = file_name_ext_trajectory
 
     if not os.path.exists(scenario_folder_path):
         print(colors.BOLD + colors.RED + f"Warning: Scenario folder '{scenario_folder_path}' not found." + colors.END)
-        
-    with open(os.path.join(scenario_folder_path, f'{scenario_name}.dat'), "r") as f:
+
+    # the DEBRISK output .dat file is named after the DEBRISK run (e.g. the vehicle), not
+    # necessarily after the scenario, so find it by extension instead of assuming a name match
+    dat_files = [f for f in os.listdir(scenario_folder_path) if f.endswith('.dat')]
+    if not dat_files:
+        print(colors.BOLD + colors.RED + f"Warning: No .dat file found in '{scenario_folder_path}'." + colors.END)
+
+    with open(os.path.join(scenario_folder_path, dat_files[0]), "r") as f:
         lines = f.readlines()
 
     # extract column names
@@ -707,9 +815,12 @@ def compress_trajaerodata_dataframe(df_trajaerodata, compress_method, compress_i
 def compress_trajaerodata_scarab_dataframe(df_trajaerodata, compress_method, compress_interval, compress_lat, compress_lon, scenario_name):
 
     df_copy = df_trajaerodata.copy()
-    
+
     print('df_copy:\n', df_copy)
     result_list = []
+
+    # material columns vary between scenarios/fragments, so detect them from the actual data instead of hard-coding
+    material_cols = [c for c in df_copy.columns if c.endswith(' [kg]') and not c.startswith('d_m ') and c != 'Total Fragment Mass [kg]']
 
     for fragment_id, group_df in df_copy.groupby('FragmentID'):
         group_df = group_df.copy()
@@ -753,23 +864,12 @@ def compress_trajaerodata_scarab_dataframe(df_trajaerodata, compress_method, com
             'Datetime': 'last',
             'd_m [kg]': 'sum',
             'ReferenceArea [m^2]': 'last',
-            'AA7075 [kg]': 'last',
-            'CFRP [kg]': 'last',
-            'AA2195 [kg]': 'last',
-            'Cu [kg]': 'last',
-            'CCSic [kg]': 'last',
-            'A316 [kg]': 'last',
-            'Inconel718 [kg]': 'last',
-            'd_m AA7075 [kg]': 'sum',
-            'd_m CFRP [kg]': 'sum',
-            'd_m AA2195 [kg]': 'sum',
-            'd_m Cu [kg]': 'sum',
-            'd_m CCSic [kg]': 'sum',
-            'd_m A316 [kg]': 'sum',
-            'd_m Inconel718 [kg]': 'sum',
             'scenario': 'last',
             'reentry_vehicle': 'last',
         }
+        for col in material_cols:
+            agg_dict[col] = 'last'
+            agg_dict[f'd_m {col}'] = 'sum'
 
         # Perform grouping and aggregation
         compressed_group = (

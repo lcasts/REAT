@@ -4,7 +4,7 @@
 
 REAT is a Python-based tool licensed under the GNU Affero General Public License v3.0. The licence can be found in LICENCE.md. It is designed to calculate the global emissions of specified re-entering space transportation vehicles. By combining trajectory simulation, atmospheric modeling, emission inventories, and optional integrating NASA's Chemical Equilibrium Analysis (CEA), it provides detailed insights into re-entry vehicle emissions. The program is highly customizable and supports both simplified and advanced emission calculations. It should be noted that the re-entry and emission calculation is currently subject to great uncertainties and therefore the results should be considered with caution.
 REAT is a scientific project and if you use it for publications or presentations in science, please support the project by citing the tool as following:
-Jan-Steffen Fischer and Sebastian Winterhoff and Stefanos Fasoulas, Re-entry Emission Assessment Tool (REAT). University of Stuttgart. 2025. Available: https://github.com/lcasts/REAT
+Jan-Steffen Fischer and Sebastian Winterhoff and Stefanos Fasoulas, Re-entry Emission Assessment Tool (REAT). University of Stuttgart. 2026. Available: https://github.com/lcasts/REAT
 
 ---
 
@@ -105,12 +105,14 @@ Jan-Steffen Fischer and Sebastian Winterhoff and Stefanos Fasoulas, Re-entry Emi
 .
 ├── input_data/                 # Contains all input files
 │   ├── config.py
+│   ├── cea_species.yaml        # Contains the converted thermo.lib database
 │   ├── drama_model_folder\SARA\REENTRY\input
 │   │   ├── materials.xml       # Contains material data
 │   │   └── objects.xml         # Contains DRAMA model description
 │   ├── emission_factors.xlsx
 │   ├── material_data.xlsx
 │   ├── scenarios.xlsx
+│   ├── folder_to_SCARAB_or_DEBRISK_output # Optional
 │   └── example_trajectories.csv          # Optional
 ├── NASA_CEA/                   # NASA CEA tool and related files
 ├── output_data/                # Folder for storing output results
@@ -163,7 +165,7 @@ Jan-Steffen Fischer and Sebastian Winterhoff and Stefanos Fasoulas, Re-entry Emi
 ---
 
 ## **Contact**
-- If you have questions, remarks or wishes please contact us under fischerj[at]irs.uni-stuttgart.de
+- If you have questions, remarks or wishes please contact us under jan-steffen.fischer[at]irs.uni-stuttgart.de
 
 ---
 

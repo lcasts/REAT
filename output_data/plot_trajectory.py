@@ -42,6 +42,11 @@ def main():
     # Read data from CSV
     df = pd.read_csv(CSV_FILE)
 
+    # Most pipeline outputs (Drama/Scarab/Debrisk/PyDrama) store velocity in km/s;
+    # only the Ballistic path stores it in m/s directly.
+    if "Velocity [m/s]" not in df.columns and "Velocity [km/s]" in df.columns:
+        df["Velocity [m/s]"] = df["Velocity [km/s]"] * 1000
+
     # 1) Altitude [km] vs Time [s]
     make_plot(
         df["Time [s]"],

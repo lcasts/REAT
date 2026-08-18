@@ -339,7 +339,7 @@ phases:
   state:
     T: 300.0
     P: 1.01325e+05
-- name: rocket_emission
+- name: nox_emission
   thermo: ideal-gas
   elements: [C, H, N, O, Ar, He]
   species: [

@@ -90,7 +90,7 @@ def plot_emissions_pie(df, emissions, save_name):
         autotext.set_fontsize(9)
     ax.set_title('Total Emission Share per Species')
     plt.tight_layout()
-    plt.savefig(f"output_data\plots\{save_name}_pie_chart.png")
+    plt.savefig(os.path.join("output_data", "plots", f"{save_name}_pie_chart.png"))
     plt.show()
 
 # --- Save Total Emissions to Excel ---
@@ -99,7 +99,7 @@ def save_emissions_summary(df, emissions, save_name):
     total_sum = total_emissions.sum()
     summary_df = total_emissions.to_frame(name='Total Emissions [kg]')
     summary_df.loc['TOTAL'] = total_sum
-    summary_df.to_excel(f"output_data\plots\{save_name}_emissions_summary.xlsx")
+    summary_df.to_excel(os.path.join("output_data", "plots", f"{save_name}_emissions_summary.xlsx"))
 
 # --- Main Execution ---
 def main():

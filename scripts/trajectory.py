@@ -150,7 +150,7 @@ def initialize_parameters(args):
         'Altitude [km]': altitude / 1000,
         'Lat [deg]': lat,
         'Lon [deg]': lon,
-        'Velocity [k/s]': velocity,
+        'Velocity [m/s]': velocity,
         'Downrange [m]': 0,
         'Downrange [km]': 0,
         'v_x': v_x,

@@ -7,15 +7,15 @@ import numpy as np
 
 #### Choose which Scenarios to process ####
 #-------------------------------------
-all_scenarios = True # When False only the user_defined_scenarios will be processed
-user_defined_scenarios = ["2021-034_CZ-3B_Y47_Stage_3"] # Based on the scenario name 2019-002_Falcon_9-025_Stage_2 2019-001_CZ-2D_Y35_Stage_2
+all_scenarios = False # When False only the user_defined_scenarios will be processed
+user_defined_scenarios = ["2021-034_CZ-3B_Y47_Stage_3"] # Based on the scenario name
 ##endregion
 
 #region: #### Trajectory Config ####
 #### Selection of Trajectory Data ####
 #-------------------------------------
 traj_inp_data = 'PyDrama' #OwnBallistic, Ballistic, OwnDrama, PyDrama, OwnScarab, OwnDebrisk
-file_name_ext_trajectory = 'input_data/merged_trajectory_aerothermal_data.csv' 
+file_name_ext_trajectory = 'input_data/merged_trajectory_aerothermal_data.csv' #Input trajectory or input folder
 
 #### Ballistic Trajectory Simulation Parameters ####
 #-------------------------------------
@@ -31,7 +31,7 @@ R_0 = 6.378388e6            # Mean Earth Radius [m] (WGS84)
 g_0 = 9.80665               # Mean Earth Gravity [m/s²]
 R = 287.058                 # J/(kg·K)      for p = ρ⋅R⋅T
 kappa = 1.4                 # Heat capacity
-Pr_lam = 0.72               # Prandtl laminar
+Pr_lam = 0.7               # Prandtl laminar
 Pr_turb = 0.9                # Prandtl turbulent
 rho_0 = 1.225               # kg/m^3
 p_0 = 1013.25               # hPa
@@ -66,9 +66,9 @@ calculate_emissions = True
 # Choose which emission calculation type to use
 use_emission_factors = True
 emission_factor_method = "atomic" #"stoichiometric" or "atomic"
-use_nasa_cea = True
+use_nasa_cea = False
 calculate_nox = True
-nox_method = "nasa_cea" # nasa_cea, cantera
+nox_method = "cantera" # nasa_cea, cantera
 calculate_black_carbon = False # for now not implemented
 #-------------------------------------
 x_ab = 4   #Emission calculation diameter factor for interaction
@@ -123,13 +123,14 @@ nasa_cea_exe = 'FCEA2.exe'
 file_name_emission_factors = 'emission_factors.xlsx'
 sheet_name_emission_factors = 'Emission_Factors'
 
-file_name_scenarios = 'scenarios.xlsx'
+file_name_scenarios = 'reentry_scenario_ges_neu_final.xlsx'
 sheet_name_scenarios = 'scenarios'
 
 file_name_material_data = 'material_data.xlsx'
 sheet_name_material_data = 'Material_Data'
 
-file_name_ct_species = 'cea_species.yaml'
+file_name_ct_species = 'input_data/cea_species.yaml'
+ct_species_phase_name = 'nox_emission'
 
 #### Colors for Terminal Outputs ####
 class colors:
