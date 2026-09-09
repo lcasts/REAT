@@ -740,6 +740,262 @@ phases:
   elements: [Al, C, O]
   species: ["C(gr)","AL2O3(a)", "AL2O3(L)"]
 
+# Condensed-phase companions to 'cea_gas', for material combustion products that only exist
+# as solid/liquid in NASA CEA's own thermo.inp database (no gas-phase entry): Cr2O3, Fe2O3,
+# V2O5. Species definitions (Hf, S, Cp - the NASA9 data) are unchanged, taken verbatim from
+# the existing 'species:' section of this file (sourced from NASA CEA thermo.inp).
+#
+# Each pure condensed compound gets its OWN single-species 'fixed-stoichiometry' phase,
+# rather than being lumped into one shared 'ideal-condensed' (solid-solution) phase: these
+# compounds are immiscible pure solids/liquids, not a mixing solid solution, and modeling
+# them as one ideal-solution phase caused the VCS/Gibbs equilibrium solver to fail to
+# converge even for trivial cases. Use together with 'cea_gas' via
+# ct.Mixture([gas, cr2o3_i_prime, cr2o3_i, cr2o3_l, fe2o3_cr, v2o5_cr, v2o5_l]) for combined
+# gas+condensed equilibrium.
+- name: cr2o3_i_prime
+  thermo: fixed-stoichiometry
+  elements: [Cr, O]
+  species: ["Cr2O3(I')"]
+- name: cr2o3_i
+  thermo: fixed-stoichiometry
+  elements: [Cr, O]
+  species: ["Cr2O3(I)"]
+- name: cr2o3_l
+  thermo: fixed-stoichiometry
+  elements: [Cr, O]
+  species: ["Cr2O3(L)"]
+- name: fe2o3_cr
+  thermo: fixed-stoichiometry
+  elements: [Fe, O]
+  species: ["Fe2O3(cr)"]
+- name: v2o5_cr
+  thermo: fixed-stoichiometry
+  elements: [V, O]
+  species: ["V2O5(cr)"]
+- name: v2o5_l
+  thermo: fixed-stoichiometry
+  elements: [V, O]
+  species: ["V2O5(L)"]
+
+# Condensed pure-element reactant phases, one per material_data.xlsx column (element/allotrope
+# naming matches material_data.xlsx exactly, e.g. 'AL(cr)', 'Fe(a)', 'Ti(a)'). H, N, O, CL are
+# not listed here - those columns are fed from the gas-phase atomic/molecular species already
+# in 'cea_gas'. Each is its own single-species 'fixed-stoichiometry' phase for the same reason
+# as the oxide phases above (immiscible pure solids, not a solid solution).
+- name: al_cr
+  thermo: fixed-stoichiometry
+  elements: [Al]
+  species: ["AL(cr)"]
+- name: ag_cr
+  thermo: fixed-stoichiometry
+  elements: [Ag]
+  species: ["Ag(cr)"]
+- name: b_b
+  thermo: fixed-stoichiometry
+  elements: [B]
+  species: ["B(b)"]
+- name: cr_cr
+  thermo: fixed-stoichiometry
+  elements: [Cr]
+  species: ["Cr(cr)"]
+- name: co_a
+  thermo: fixed-stoichiometry
+  elements: [Co]
+  species: ["Co(a)"]
+- name: cu_cr
+  thermo: fixed-stoichiometry
+  elements: [Cu]
+  species: ["Cu(cr)"]
+- name: fe_a
+  thermo: fixed-stoichiometry
+  elements: [Fe]
+  species: ["Fe(a)"]
+- name: li_cr
+  thermo: fixed-stoichiometry
+  elements: [Li]
+  species: ["Li(cr)"]
+- name: mg_cr
+  thermo: fixed-stoichiometry
+  elements: [Mg]
+  species: ["Mg(cr)"]
+- name: mo_cr
+  thermo: fixed-stoichiometry
+  elements: [Mo]
+  species: ["Mo(cr)"]
+- name: mn_a
+  thermo: fixed-stoichiometry
+  elements: [Mn]
+  species: ["Mn(a)"]
+- name: nb_cr
+  thermo: fixed-stoichiometry
+  elements: [Nb]
+  species: ["Nb(cr)"]
+- name: ni_cr
+  thermo: fixed-stoichiometry
+  elements: [Ni]
+  species: ["Ni(cr)"]
+- name: p_cr
+  thermo: fixed-stoichiometry
+  elements: [P]
+  species: ["P(cr)"]
+- name: pb_cr
+  thermo: fixed-stoichiometry
+  elements: [Pb]
+  species: ["Pb(cr)"]
+- name: s_a
+  thermo: fixed-stoichiometry
+  elements: [S]
+  species: ["S(a)"]
+- name: si_cr
+  thermo: fixed-stoichiometry
+  elements: [Si]
+  species: ["Si(cr)"]
+- name: sn_cr
+  thermo: fixed-stoichiometry
+  elements: [Sn]
+  species: ["Sn(cr)"]
+- name: ta_cr
+  thermo: fixed-stoichiometry
+  elements: [Ta]
+  species: ["Ta(cr)"]
+- name: ti_a
+  thermo: fixed-stoichiometry
+  elements: [Ti]
+  species: ["Ti(a)"]
+- name: v_cr
+  thermo: fixed-stoichiometry
+  elements: [V]
+  species: ["V(cr)"]
+- name: w_cr
+  thermo: fixed-stoichiometry
+  elements: [W]
+  species: ["W(cr)"]
+- name: zr_a
+  thermo: fixed-stoichiometry
+  elements: [Zr]
+  species: ["Zr(a)"]
+- name: zn_cr
+  thermo: fixed-stoichiometry
+  elements: [Zn]
+  species: ["Zn(cr)"]
+- name: c_gr
+  thermo: fixed-stoichiometry
+  elements: [C]
+  species: ["C(gr)"]
+
+# Higher-temperature allotrope/liquid phases for the same elements, mirroring the melting-point
+# switch already used for the live NASA CEA material-combustion input (create_inp_file(), e.g.
+# 'AL(cr)' -> 'AL(L)' above 933.61 K). One single-species phase per allotrope, same rationale
+# as above (immiscible pure solids/liquids).
+- name: al_l
+  thermo: fixed-stoichiometry
+  elements: [Al]
+  species: ["AL(L)"]
+- name: zn_l
+  thermo: fixed-stoichiometry
+  elements: [Zn]
+  species: ["Zn(L)"]
+- name: li_l
+  thermo: fixed-stoichiometry
+  elements: [Li]
+  species: ["Li(L)"]
+- name: ag_l
+  thermo: fixed-stoichiometry
+  elements: [Ag]
+  species: ["Ag(L)"]
+- name: sn_l
+  thermo: fixed-stoichiometry
+  elements: [Sn]
+  species: ["Sn(L)"]
+- name: mg_l
+  thermo: fixed-stoichiometry
+  elements: [Mg]
+  species: ["Mg(L)"]
+- name: mn_b
+  thermo: fixed-stoichiometry
+  elements: [Mn]
+  species: ["Mn(b)"]
+- name: mn_c
+  thermo: fixed-stoichiometry
+  elements: [Mn]
+  species: ["Mn(c)"]
+- name: mn_d
+  thermo: fixed-stoichiometry
+  elements: [Mn]
+  species: ["Mn(d)"]
+- name: mn_l
+  thermo: fixed-stoichiometry
+  elements: [Mn]
+  species: ["Mn(L)"]
+- name: fe_c
+  thermo: fixed-stoichiometry
+  elements: [Fe]
+  species: ["Fe(c)"]
+- name: fe_d
+  thermo: fixed-stoichiometry
+  elements: [Fe]
+  species: ["Fe(d)"]
+- name: fe_l
+  thermo: fixed-stoichiometry
+  elements: [Fe]
+  species: ["Fe(L)"]
+- name: co_b
+  thermo: fixed-stoichiometry
+  elements: [Co]
+  species: ["Co(b)"]
+- name: co_l
+  thermo: fixed-stoichiometry
+  elements: [Co]
+  species: ["Co(L)"]
+- name: cr_l
+  thermo: fixed-stoichiometry
+  elements: [Cr]
+  species: ["Cr(L)"]
+- name: cu_l
+  thermo: fixed-stoichiometry
+  elements: [Cu]
+  species: ["Cu(L)"]
+- name: p_l
+  thermo: fixed-stoichiometry
+  elements: [P]
+  species: ["P(L)"]
+- name: pb_l
+  thermo: fixed-stoichiometry
+  elements: [Pb]
+  species: ["Pb(L)"]
+- name: s_b
+  thermo: fixed-stoichiometry
+  elements: [S]
+  species: ["S(b)"]
+- name: s_l
+  thermo: fixed-stoichiometry
+  elements: [S]
+  species: ["S(L)"]
+- name: si_l
+  thermo: fixed-stoichiometry
+  elements: [Si]
+  species: ["Si(L)"]
+- name: ti_b
+  thermo: fixed-stoichiometry
+  elements: [Ti]
+  species: ["Ti(b)"]
+- name: ti_l
+  thermo: fixed-stoichiometry
+  elements: [Ti]
+  species: ["Ti(L)"]
+- name: zr_b
+  thermo: fixed-stoichiometry
+  elements: [Zr]
+  species: ["Zr(b)"]
+- name: zr_l
+  thermo: fixed-stoichiometry
+  elements: [Zr]
+  species: ["Zr(L)"]
+- name: ni_l
+  thermo: fixed-stoichiometry
+  elements: [Ni]
+  species: ["Ni(L)"]
+
 - name: cea_gas
   thermo: ideal-gas
   elements: [Ag, Al, Ar, B, Ba, Be, Br, C, Ca, Cd, Cl, Co, Cr, Cs, Cu, D, E, F, Fe, Ga, Ge, H, He, Hg, I, In, K, Kr, Li, Mg, Mn, Mo, N, Na, Nb, Ne, Ni, O, P, Pb, Rb, S, Sc, Si, Sn, Sr, Ta, Ti, U, V, W, Xe, Zn, Zr]
@@ -13546,6 +13802,9 @@ species:
     temperature-ranges: [200.00, 1235.08]
     data:
     - [-70992.365, 725.4788, 0.10665184, 0.0055295416, -4.4255909e-06, 2.0916681e-09, -3.8889245e-13, -4614.0143, 5.074216]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 10.283 cm^3/mol
   note: Cubic. Ref-Elm. Cox,1989 p228. [coda89]
 - name: Ag(L)
   composition: {Ag: 1}
@@ -13554,6 +13813,9 @@ species:
     temperature-ranges: [1235.08, 6000.00]
     data:
     - [0, 0, 4.0170738, 0, 0, 0, 0, -467.227, -17.715271]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 10.283 cm^3/mol
   note: Liquid. Ref-Elm. Cox,1989 p228. [coda89]
 - name: AL(cr)
   composition: {Al: 1}
@@ -13573,6 +13835,9 @@ species:
     temperature-ranges: [933.61, 6000.00]
     data:
     - [0, 0, 3.8186255, 0, 0, 0, 0, -95.763232, -17.525534]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 9.993 cm^3/mol
   note: Liquid. Ref-Elm. Cox,1989 p217. [coda89]
 - name: ALBr3(cr)
   composition: {Al: 1, Br: 3}
@@ -14601,6 +14866,9 @@ species:
     data:
     - [-865183.45, 14621.352, -99.710891, 0.37943386, -0.00078001063, 8.553584e-07, -3.8901517e-10, -67959.635, 530.65502]
     - [-987756.07, 6820.6022, -15.216375, 0.022345417, -9.0192466e-06, 0, 0, -38528.39, 101.43994]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 6.622 cm^3/mol
   note: Alpha. Ref-Elm. Chase,1998 pp943-6. [j 9/67]
 - name: Co(b)
   composition: {Co: 1}
@@ -14612,6 +14880,9 @@ species:
     - [-1.5763493e+09, 9154318.2, -21979.675, 27.933567, -0.019803104, 7.4251247e-06, -1.149433e-09, -51821984, 139984.62]
     - [0, 0, 307.08721, -0.21554872, 0, 0, 0, -213929.3, -1913.1048]
     - [1.6483381e+09, -4036220.2, 3722.6857, -1.5263266, 0.00023546741, 0, 0, 26490103, -27514.666]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 6.622 cm^3/mol
   note: Beta.Ref-Elm.Below Lambda trans. Chase,1998 pp943-6. [j 9/67]
 - name: Co(L)
   composition: {Co: 1}
@@ -14620,6 +14891,9 @@ species:
     temperature-ranges: [1768.00, 6000.00]
     data:
     - [0, 0, 4.8711229, 0, 0, 0, 0, -176.13817, -24.484023]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 6.622 cm^3/mol
   note: Liquid. Ref-Elm. Chase,1998 pp943-6. [j 9/67]
 - name: Cr(cr)
   composition: {Cr: 1}
@@ -14630,6 +14904,9 @@ species:
     - [805108.41, -13398.428, 82.735073, -0.2075857, 0.00020087641, 0, 0, 61823.579, -455.99717]
     - [-253442.54, 3119.4041, -13.584398, 0.043235702, -5.6241028e-05, 3.6529107e-08, -8.9732984e-12, -16065.591, 78.580437]
     - [-30050064, 126441.03, -213.93994, 0.19376848, -9.4232058e-05, 2.4451391e-08, -2.6067937e-12, -758238.87, 1441.9078]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 7.232 cm^3/mol
   note: Below & Above lambda trans. Ref-Elm. Chase,1998 pp959-62. [j 6/73]
 - name: Cr(L)
   composition: {Cr: 1}
@@ -14638,6 +14915,9 @@ species:
     temperature-ranges: [2130.00, 6000.00]
     data:
     - [0, 0, 4.7302848, 0, 0, 0, 0, 575.56331, -24.53179]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 7.232 cm^3/mol
   note: Liquid. Ref-Elm. Chase,1998 pp959-62. [j 6/73]
 - name: CrN(cr)
   composition: {Cr: 1, N: 1}
@@ -14666,6 +14946,14 @@ species:
     temperature-ranges: [200.00, 306.00]
     data:
     - [-2112979.8, 0, 220.74319, -1.1649739, 0.0018539712, 0, 0, -174683.12, -994.90252]
+  # molar-volume not given in NASA CEA's thermo.inp for this species (unlike AL2O3(a)/(L),
+  # which are curated with it) - added here from literature density (eskolaite, ~5.22 g/cm^3)
+  # only so this ideal-condensed phase can be constructed; PV is a negligible (~J/mol) term
+  # in condensed-phase Gibbs energy at afterburning pressures, so it does not affect the
+  # equilibrium composition - all thermochemical data (Hf, S, Cp) above is unmodified CEA data.
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 29.12 cm^3/mol
   note: Hexagonal. Gurvich,1982 pt1 p18 pt2 p22. [tpis82]
 - name: Cr2O3(I)
   composition: {Cr: 2, O: 3}
@@ -14676,6 +14964,9 @@ species:
     - [0, 0, 6705.9156, -43.037605, 0.069192292, 0, 0, -834987.52, -28441.676]
     - [0, 0, 244.35703, -1.3994455, 0.00211351, 0, 0, -166503.29, -1059.1722]
     - [-341547.49, 0, 16.169323, -0.0015178285, 1.0148523e-06, 0, 0, -143047.82, -83.749195]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 29.12 cm^3/mol  # see Cr2O3(I') note above
   note: Hexagonal. Gurvich,1982 pt1 p18 pt2 p22. [tpis82]
 - name: Cr2O3(L)
   composition: {Cr: 2, O: 3}
@@ -14684,6 +14975,9 @@ species:
     temperature-ranges: [2705.00, 6000.00]
     data:
     - [0, 0, 20.446184, 0, 0, 0, 0, -138313.99, -112.36031]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 29.12 cm^3/mol  # see Cr2O3(I') note above
   note: Liquid. Gurvich,1982 pt1 p18 pt2 p22. [tpis82]
 - name: Cs(cr)
   composition: {Cs: 1}
@@ -14990,6 +15284,9 @@ species:
     temperature-ranges: [200.00, 1358.00]
     data:
     - [-24557.751, 164.80692, 2.0809471, 0.0026390783, -2.7141014e-06, 1.402865e-09, -9.7243216e-14, -1737.851, -8.1331668]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 7.092 cm^3/mol
   note: Cubic. Ref-Elm.Cox,1989 p226. [coda89]
 - name: Cu(L)
   composition: {Cu: 1}
@@ -14998,6 +15295,9 @@ species:
     temperature-ranges: [1358.00, 6000.00]
     data:
     - [0, 0, 3.9449108, 0, 0, 0, 0, -211.10138, -18.360658]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 7.092 cm^3/mol
   note: Liquid. Ref-Elm.Cox,1989 p226. [coda89]
 - name: CuBr(a)
   composition: {Cu: 1, Br: 1}
@@ -15228,6 +15528,9 @@ species:
     - [3543032.7, -24471.505, 65.610209, -0.070439297, 3.1810529e-05, 0, 0, 134506, -413.37887]
     - [2.6610263e+09, -7846828, -728.92123, 26.138883, -0.034947421, 1.7637526e-05, -2.9077233e-09, 52348685, -15290.522]
     - [2.4819231e+08, 0, -559.43491, 0.32717049, 0, 0, 0, 646750.34, 3669.1687]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 7.092 cm^3/mol
   note: Alpha. Ref-Elm.Below Lambda trans. Chase,1998 p1221. [j 3/78]
 - name: Fe(c)
   composition: {Fe: 1}
@@ -15236,6 +15539,9 @@ species:
     temperature-ranges: [1184.00, 1665.00]
     data:
     - [1.4424286e+09, -5335491.3, 8052.828, -6.3030896, 0.002677273, -5.7500455e-07, 4.718612e-11, 32642642, -55088.522]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 7.092 cm^3/mol
   note: Gamma. Ref-Elm. Chase,1998 pp1221-5. [j 3/78]
 - name: Fe(d)
   composition: {Fe: 1}
@@ -15244,6 +15550,9 @@ species:
     temperature-ranges: [1665.00, 1809.00]
     data:
     - [-3.45019e+08, 0, 705.75015, -0.54429779, 0.00011900401, 0, 0, -804572.57, -4545.1803]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 7.092 cm^3/mol
   note: Delta. Ref-Elm. Chase,1998 pp1221-5. [j 3/78]
 - name: Fe(L)
   composition: {Fe: 1}
@@ -15252,6 +15561,9 @@ species:
     temperature-ranges: [1809.00, 6000.00]
     data:
     - [0, 0, 5.5353833, 0, 0, 0, 0, -1270.6087, -29.48115]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 7.092 cm^3/mol
   note: Liquid. Ref-Elm. Chase,1998 pp1221-5. [j 3/78]
 - name: Fe(CO)5(L)
   composition: {Fe: 1, C: 5, O: 5}
@@ -15396,6 +15708,12 @@ species:
     - [3.3334925e+08, -1859961.8, 3885.1382, -3.5625995, 0.0012310559, 0, 0, 10580589, -25553.061]
     - [-28440091, 125378.65, -211.90804, 0.22214816, -0.00012067652, 3.480738e-08, -4.1652979e-12, -848392.65, 1433.0022]
     - [0, 0, 17.114399, 0, 0, 0, 0, -104159.96, -87.806137]
+  # molar-volume not given in NASA CEA's thermo.inp for this species - added from literature
+  # density (hematite, ~5.24 g/cm^3) only so this ideal-condensed phase can be constructed;
+  # negligible effect on equilibrium composition, see Cr2O3(I') note above for rationale.
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 30.48 cm^3/mol
   note: Hematite below Curie pt. Pankratz,1983 p158. [g 1/01]
 - name: Fe2(SO4)3(cr)
   composition: {Fe: 2, S: 3, O: 12}
@@ -16382,6 +16700,9 @@ species:
     data:
     - [-9860.6524, 0, 2.3043238, 0.0026716637, 0, 0, 0, -838.85361, -10.478817]
     - [72388.25, 0, 0.15703145, 0.0067704041, 0, 0, 0, -104.94974, 0.99617631]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 12.998 cm^3/mol
   note: Crystal. Ref-Elm. Gurvich,1982 pt1 p245 pt2 p286. [tpis82]
 - name: Li(L)
   composition: {Li: 1}
@@ -16390,6 +16711,9 @@ species:
     temperature-ranges: [453.69, 6000.00]
     data:
     - [24655.692, 0, 3.7557234, -0.00063323034, 3.1607395e-07, 0, 0, -729.91167, -17.012747]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 12.998 cm^3/mol
   note: Liquid. Ref-Elm. Gurvich,1982 pt1 p245 pt2 p286. [tpis82]
 - name: LiALO2(cr)
   composition: {Li: 1, Al: 1, O: 2}
@@ -16690,6 +17014,9 @@ species:
     data:
     - [-5412.2251, 0, 1.4581737, 0.013302047, -4.0988585e-05, 4.7543391e-08, 0, -775.9472, -6.9897023]
     - [-28600.603, 0, 3.3988774, -0.00072439627, 1.4052542e-06, 0, 0, -1089.5199, -15.459737]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 13.984 cm^3/mol
   note: Hexagonal. Ref-Elm. Alcock,1993. [srd 93]
 - name: Mg(L)
   composition: {Mg: 1}
@@ -16698,6 +17025,9 @@ species:
     temperature-ranges: [923.00, 6000.00]
     data:
     - [0, 0, 4.1253183, 0, 0, 0, 0, -658.99195, -19.378286]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 13.984 cm^3/mol
   note: Liquid. Ref-Elm. Alcock,1993. [srd 93]
 - name: MgAL2O4(cr)
   composition: {Mg: 1, Al: 2, O: 4}
@@ -17006,6 +17336,9 @@ species:
     temperature-ranges: [200.00, 980.00]
     data:
     - [-19847.246, 180.88141, 1.0382898, 0.008813332, -1.298046e-05, 1.1188587e-08, -3.6736413e-12, -1704.143, -3.713161]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 7.620 cm^3/mol
   note: Alpha. Ref-Elm. Chase,1998 pp1571-4. [j 9/67]
 - name: Mn(b)
   composition: {Mn: 1}
@@ -17014,6 +17347,9 @@ species:
     temperature-ranges: [980.00, 1361.00]
     data:
     - [-2.0332997e+08, 859500.93, -1444.4296, 1.217026, -0.00050922646, 8.4994576e-08, 0, -5153128.5, 9753.5536]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 7.620 cm^3/mol
   note: Beta. Ref-Elm. Chase,1998 pp1571-4. [j 9/67]
 - name: Mn(c)
   composition: {Mn: 1}
@@ -17022,6 +17358,9 @@ species:
     temperature-ranges: [1361.00, 1412.00]
     data:
     - [-5539443.5, 0, 12.49195, -0.0031728883, 0, 0, 0, -13194.409, -77.011107]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 7.620 cm^3/mol
   note: Gamma. Ref-Elm. Chase,1998 pp1571-4. [j 9/67]
 - name: Mn(d)
   composition: {Mn: 1}
@@ -17030,6 +17369,9 @@ species:
     temperature-ranges: [1412.00, 1519.00]
     data:
     - [-4256613.5, 0, 10.012892, -0.0017267277, 0, 0, 0, -10001.105, -60.591299]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 7.620 cm^3/mol
   note: Delta. Ref-Elm. Chase,1998 pp1571-4. [j 9/67]
 - name: Mn(L)
   composition: {Mn: 1}
@@ -17038,6 +17380,9 @@ species:
     temperature-ranges: [1519.00, 6000.00]
     data:
     - [0, 0, 5.5353833, 0, 0, 0, 0, -939.37831, -28.535704]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 7.620 cm^3/mol
   note: Liquid. Ref-Elm. Chase,1998 pp1571-4. [j 9/67]
 - name: Mo(cr)
   composition: {Mo: 1}
@@ -17048,6 +17393,9 @@ species:
     - [-49616.893, 428.09412, 0.76719847, 0.0057315183, -6.3816412e-06, 3.7081924e-09, -7.9173471e-13, -3039.5846, -1.2304677]
     - [-3617592.7, 14746.399, -21.366727, 0.021185773, -9.7897417e-06, 2.4961301e-09, -2.4223031e-13, -89778.961, 150.71603]
     - [4.7599096e+09, -5321527.3, -874.74031, 3.7947895, -0.0021315687, 4.9740759e-07, -4.3254251e-11, 40965696, 113.0484]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 9.334 cm^3/mol
   note: Crystal. Ref-Elm. Chase,1998 pp1577-80. [j 3/78]
 - name: Mo(L)
   composition: {Mo: 1}
@@ -17589,6 +17937,9 @@ species:
     - [-42548.117, 387.52971, 1.1844497, 0.0045074366, -5.232092e-06, 3.5134525e-09, -9.5076058e-13, -2864.4493, -2.4429751]
     - [25276956, -108572.05, 192.91682, -0.17274277, 8.6712746e-05, -2.2661624e-08, 2.4373873e-12, 647231.78, -1284.0273]
     - [9.0167887e+08, -1888649.5, 1578.8454, -0.65888822, 0.00014163078, -1.3965614e-08, 4.411624e-13, 12647605, -11751.573]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 10.841 cm^3/mol
   note: Crystal. Ref-Elm. Chase,1998 pp1675-8. [j12/73]
 - name: Nb(L)
   composition: {Nb: 1}
@@ -17674,6 +18025,9 @@ species:
     - [-3.3458873e+08, 3424528, -13944.256, 28.256548, -0.028477891, 1.1427898e-05, 0, -17502508, 81798.614]
     - [1.0363547e+09, -6813278.5, 18543.676, -26.730065, 0.021535316, -9.1924641e-06, 1.624333e-09, 37719610, -115761.75]
     - [2.5184407e+09, -9895465.2, 16097.375, -13.864786, 0.0066713209, -1.6989882e-06, 1.788538e-10, 59876587, -108774.33]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 6.589 cm^3/mol
   note: Crystal Ref-Elm. <lambda trans 631K. Chase,1998 pp1697-700. [j12/76]
 - name: Ni(L)
   composition: {Ni: 1}
@@ -17682,6 +18036,9 @@ species:
     temperature-ranges: [1728.00, 6000.00]
     data:
     - [0, 0, 4.6798909, 0, 0, 0, 0, -321.62586, -23.354747]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 6.589 cm^3/mol
   note: Liquid. Ref-Elm. Chase,1998 pp1697-700. [j12/76]
 - name: NiS(b)
   composition: {Ni: 1, S: 1}
@@ -17795,6 +18152,9 @@ species:
     temperature-ranges: [200.00, 600.65]
     data:
     - [-614967.01, 10657.181, -71.298989, 0.26684067, -0.00051820173, 5.2386651e-07, -2.1516456e-10, -49740.776, 385.5826]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 18.272 cm^3/mol
   note: Cubic. Ref-Elm. Gurvich,1991 pt1 p400 pt2 p337. [tpis91]
 - name: Pb(L)
   composition: {Pb: 1}
@@ -17803,6 +18163,9 @@ species:
     temperature-ranges: [600.65, 3600.00]
     data:
     - [-37981.793, 0, 4.3642981, -0.0012363928, 4.9467738e-07, -5.2318176e-11, 0, -888.73304, -16.195597]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 18.272 cm^3/mol
   note: Liquid. Ref-Elm. Gurvich,1991 pt1 p400 pt2 p337. [tpis91]
 - name: PbBr2(cr)
   composition: {Pb: 1, Br: 2}
@@ -18489,6 +18852,9 @@ species:
     temperature-ranges: [200.00, 505.12]
     data:
     - [-997056.81, 18650.563, -139.30051, 0.56528009, -0.0012291626, 1.3982599e-06, -6.4658433e-10, -84798.464, 731.79812]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 16.239 cm^3/mol
   note: CrI,tetragonal. Ref-Elm. Gurvich,1991 pt1 p350 pt2 p300. [tpis91]
 - name: Sn(L)
   composition: {Sn: 1}
@@ -18497,6 +18863,9 @@ species:
     temperature-ranges: [505.12, 4700.00]
     data:
     - [98478.443, 0, 3.0289217, 0.00025317186, -1.9604282e-08, 0, 0, 220.96521, -9.0897835]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 16.239 cm^3/mol
   note: Liquid. Ref-Elm. Gurvich,1991 pt1 p350 pt2 p300. [tpis91]
 - name: SnBr2(cr)
   composition: {Sn: 1, Br: 2}
@@ -18933,6 +19302,9 @@ species:
     - [15199.42, -492.71438, 6.8556058, -0.013666256, 2.5614663e-05, -2.2356311e-08, 7.3898313e-12, 1236.0779, -32.520755]
     - [-1.0022199e+08, 469659.14, -899.26393, 0.90847143, -0.00050433235, 1.4639199e-07, -1.734427e-11, -2762235.6, 5939.5345]
     - [330503.48, 85.643517, -1.7975935, 0.0065497843, -2.8787935e-06, 4.9527251e-10, -7.7034525e-15, 1556.9331, 16.410471]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 10.868 cm^3/mol
   note: Crystal. Ref-Elm. Chase,1998 pp1899-1901. [j12/72]
 - name: Ta(L)
   composition: {Ta: 1}
@@ -19016,6 +19388,9 @@ species:
     data:
     - [35986.014, -827.2306, 7.6890978, -0.011439684, 1.3921055e-05, -4.6910572e-09, -9.8521304e-13, 2936.6214, -39.85138]
     - [-2876235.9, 0, 45.731534, -0.076923816, 3.7999195e-05, 0, 0, -20380.24, -251.62703]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 10.623 cm^3/mol
   note: Alpha. Ref-Elm. Cox,1989 p230. [coda89]
 - name: Ti(b)
   composition: {Ti: 1}
@@ -19024,6 +19399,9 @@ species:
     temperature-ranges: [1156.00, 1944.00]
     data:
     - [-1698740.6, 6576.6012, -8.556183, 0.0097895858, -3.9924188e-06, 1.1236428e-09, -1.2010481e-13, -39299.183, 65.065902]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 10.623 cm^3/mol
   note: Beta. Ref-Elm. Cox,1989 p230. [coda89]
 - name: Ti(L)
   composition: {Ti: 1}
@@ -19032,6 +19410,9 @@ species:
     temperature-ranges: [1944.00, 6000.00]
     data:
     - [0, 0, 5.6287141, 0, 0, 0, 0, -2377.3546, -30.794435]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 10.623 cm^3/mol
   note: Liquid. Ref-Elm. Cox,1989 p230. [coda89]
 - name: TiB(cr)
   composition: {Ti: 1, B: 1}
@@ -19428,6 +19809,9 @@ species:
     - [284512.59, -5094.9329, 37.150187, -0.11760309, 0.00022558235, -2.2606427e-07, 9.2895968e-11, 22543.782, -196.82417]
     - [1372056.5, -7847.5536, 20.951422, -0.020556409, 1.3232665e-05, -4.0421829e-09, 5.0875211e-13, 43748, -129.27634]
     - [5.2810677e+08, -1907420.2, 2862.6566, -2.2774929, 0.0010170789, -2.4121497e-07, 2.3771145e-11, 11698908, -19567.167]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 8.337 cm^3/mol
   note: Crystal. Ref-Elm. Chase,1998 p1917. [j 6/73]
 - name: V(L)
   composition: {V: 1}
@@ -19528,6 +19912,12 @@ species:
     data:
     - [-11495859, 220085.23, -1711.4294, 6.9976102, -0.01543893, 1.7714259e-05, -8.2839876e-09, -1174509.3, 8899.979]
     - [-470832.84, 0, 22.973874, -0.011188315, 1.1468155e-05, 0, 0, -194573.85, -115.02195]
+  # molar-volume not given in NASA CEA's thermo.inp for this species - added from literature
+  # density (~3.357 g/cm^3) only so this ideal-condensed phase can be constructed; negligible
+  # effect on equilibrium composition, see Cr2O3(I') note above for rationale.
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 54.18 cm^3/mol
   note: Rhombic. Gurvich,1982 pt1 p68 pt2 p69. [tpis82]
 - name: V2O5(L)
   composition: {V: 2, O: 5}
@@ -19536,6 +19926,9 @@ species:
     temperature-ranges: [954.00, 6000.00]
     data:
     - [0, 0, 22.851617, 0, 0, 0, 0, -188038.54, -111.31096]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 54.18 cm^3/mol  # see V2O5(cr) note above
   note: Liquid. Gurvich,1982 pt1 p68 pt2 p69. [tpis82]
 - name: W(cr)
   composition: {W: 1}
@@ -19547,6 +19940,9 @@ species:
     - [553013.48, -2041.4853, 5.8708395, -0.0019207142, 1.067653e-06, -2.355109e-10, 2.1606793e-14, 11638.125, -33.191718]
     - [2.4747369e+09, 4488921.6, -12359.783, 9.6785657, -0.0035563646, 6.3804206e-07, -4.5211235e-11, -20295009, 82743.697]
     - [-1.7555504e+10, 11790592, 1177.7154, -2.6751668, 0.00072521725, -6.1280076e-08, 0, -97022492, -1148.9262]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 9.550 cm^3/mol
   note: Crystal. Ref-Elm. Chase,1998 pp1925-8. [j 6/66]
 - name: W(L)
   composition: {W: 1}
@@ -19668,6 +20064,9 @@ species:
     temperature-ranges: [200.00, 692.73]
     data:
     - [370208.04, -5915.4755, 39.595004, -0.11437359, 0.00019343638, -1.6753851e-07, 6.0781899e-11, 26817.372, -211.48482]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 9.157 cm^3/mol
   note: Crystal. Ref-Elm. Cox,1989 p221. [coda89]
 - name: Zn(L)
   composition: {Zn: 1}
@@ -19676,6 +20075,9 @@ species:
     temperature-ranges: [692.73, 6000.00]
     data:
     - [0, 0, 3.7765304, 0, 0, 0, 0, -431.73459, -15.670779]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 9.157 cm^3/mol
   note: Liquid. Ref-Elm. Cox,1989 p221. [coda89]
 - name: ZnSO4(a)
   composition: {Zn: 1, S: 1, O: 4}
@@ -19708,6 +20110,9 @@ species:
     temperature-ranges: [200.00, 1135.00]
     data:
     - [-11536.992, 26.262034, 2.9320547, 0.00057433586, -7.6517104e-07, 1.5972028e-09, -6.0971296e-13, -1084.1533, -12.15777]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 13.991 cm^3/mol
   note: Alpha. Ref-Elm. Chase,1998 pp1943-7. [j 6/79]
 - name: Zr(b)
   composition: {Zr: 1}
@@ -19716,6 +20121,9 @@ species:
     temperature-ranges: [1135.00, 2125.00]
     data:
     - [-1065464, 4273, -3.1738565, 0.0050188426, -2.3634317e-06, 7.7075824e-10, -8.1561566e-14, -26412.474, 30.720418]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 13.991 cm^3/mol
   note: Beta. Ref-Elm. Chase,1998 pp1943-7. [j 6/79]
 - name: Zr(L)
   composition: {Zr: 1}
@@ -19724,6 +20132,9 @@ species:
     temperature-ranges: [2125.00, 6000.00]
     data:
     - [0, 0, 5.0321667, 0, 0, 0, 0, -1100.7959, -25.48066]
+  equation-of-state:
+    model: constant-volume
+    molar-volume: 13.991 cm^3/mol
   note: Liquid. Ref-Elm. Chase,1998 pp1943-7. [j 6/79]
 - name: ZrC(cr)
   composition: {Zr: 1, C: 1}

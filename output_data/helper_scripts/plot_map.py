@@ -15,7 +15,7 @@ file_pattern = os.path.join(folder_path, "TRAJ_COMP_*.csv")
 files = glob.glob(file_pattern)
 
 if not files:
-    print("No matching files found!")
+    print("No matching files found.")
     exit()
 
 lat_all = []
@@ -36,10 +36,10 @@ for file in files:
             lon_all.append(df["Lon [deg]"].values)
             dm_all.append(df["d_m [kg]"].values)
         else:
-            print(f"Missing columns in {file}")
+            print(f"Columns missing in {file}")
 
     except Exception as e:
-        print(f"Error with {file}: {e}")
+        print(f"Error in {file}: {e}")
 
 # Merge arrays
 lat = np.concatenate(lat_all)

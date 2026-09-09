@@ -9,6 +9,7 @@ import sys
 import numpy as np
 from pymsis import msis
 from io import StringIO
+import xml.etree.ElementTree as ET   # objects.xml (DRAMA) / result XML (DEBRISK) for material_source = 'model'
 from datetime import datetime, timedelta
 from tqdm import tqdm
 
@@ -60,6 +61,101 @@ def get_input_data():
     except Exception as e:
         handle_error(e, "get_input_data", "Input data could not be processed")     
 
+# --- Component materials from the simulation file (material_source = 'model') ---------
+# DRAMA keeps them in objects.xml, DEBRISK in the result CSV/XML; the generic tool names are
+# mapped onto the material database via drama_material_map / debrisk_material_map.
+def map_tool_material(raw_material, mapping, tool):
+    """Map a tool-specific material name onto the material database. None if unusable."""
+    if raw_material is None:
+        return None
+    raw = str(raw_material).strip()
+    if raw not in mapping:
+        print(colors.BOLD + colors.RED +
+              f"{tool}: material '{raw}' is not in the material map - component skipped. "
+              f"Add it to the map in config.py." + colors.END)
+        return None
+    mapped = mapping[raw]
+    if mapped is None:
+        print(colors.BOLD + colors.RED +
+              f"{tool}: material '{raw}' has no counterpart in the material database "
+              f"- component skipped." + colors.END)
+    return mapped
+
+
+def find_drama_objects_xml(scenario_folder, pydrama_results_folder=None):
+    """Locate the objects.xml of a DRAMA run, for the PyDrama and the external layout."""
+    candidates = []
+    if pydrama_results_folder:
+        base = os.path.dirname(os.path.dirname(os.path.abspath(pydrama_results_folder)))
+        candidates.append(os.path.join(base, 'SARA', 'REENTRY', 'input', 'objects.xml'))
+    base = os.path.abspath(scenario_folder)
+    for _ in range(4):
+        candidates.append(os.path.join(base, 'input', 'objects.xml'))
+        base = os.path.dirname(base)
+    for c in candidates:
+        if os.path.isfile(c):
+            return c
+    return None
+
+
+def drama_material_by_object(objects_xml_path):
+    """{uniqueID: mapped material} from a DRAMA objects.xml; uniqueID is the ObjectID."""
+    result = {}
+    if not objects_xml_path:
+        return result
+    try:
+        root = ET.parse(objects_xml_path).getroot()
+    except Exception as e:
+        print(colors.BOLD + colors.RED + f"Could not read {objects_xml_path}: {e}" + colors.END)
+        return result
+    for obj in root.findall('object'):
+        uid = (obj.findtext('uniqueID') or '').strip()
+        if uid:
+            result[uid] = map_tool_material(obj.findtext('material'), drama_material_map, 'DRAMA')
+    return result
+
+
+def debrisk_material_by_component(scenario_folder_path):
+    """{component name: mapped material} for a DEBRISK run, from the result CSV or the XML."""
+    result = {}
+    csvs = [f for f in os.listdir(scenario_folder_path)
+            if f.endswith('.csv') and not f.startswith('CbMach')]
+    for name in csvs:
+        try:
+            with open(os.path.join(scenario_folder_path, name), 'r', encoding='utf-8', errors='replace') as f:
+                lines = f.readlines()
+            header_idx = next(i for i, l in enumerate(lines) if l.startswith('Parent id;'))
+        except (StopIteration, OSError):
+            continue
+        header = [h.strip().strip('"') for h in lines[header_idx].rstrip('\n').split(';')]
+        try:
+            i_name, i_mat = header.index('Name'), header.index('Material')
+        except ValueError:
+            continue
+        for line in lines[header_idx + 1:]:
+            cells = [c.strip().strip('"') for c in line.rstrip('\n').split(';')]
+            if len(cells) > max(i_name, i_mat) and cells[i_name]:
+                result[cells[i_name]] = map_tool_material(cells[i_mat], debrisk_material_map, 'DEBRISK')
+        if result:
+            return result
+
+    for name in [f for f in os.listdir(scenario_folder_path) if f.endswith('.xml')]:
+        try:
+            root = ET.parse(os.path.join(scenario_folder_path, name)).getroot()
+        except Exception:
+            continue
+        for obj in root.iter('object'):
+            nm = obj.find('name')
+            mat = obj.find('.//material')
+            if nm is not None and nm.text and mat is not None:
+                result[nm.text.strip()] = map_tool_material(mat.text, debrisk_material_map, 'DEBRISK')
+        if result:
+            print(colors.BOLD + colors.GREEN +
+                  f"DEBRISK: materials taken from {name} (no usable CSV found)." + colors.END)
+            return result
+    return result
+
+
 # Import Drama Files
 def drama_input(df_scenarios,scenario_name, pydrama_results_folder=None):
     reentry_vehicle = df_scenarios.loc[scenario_name, 'reentry_vehicle']
@@ -71,7 +167,9 @@ def drama_input(df_scenarios,scenario_name, pydrama_results_folder=None):
         print(colors.BOLD + colors.GREEN + "Using PyDrama results folder: ", scenario_folder + colors.END)
     
     if not os.path.exists(scenario_folder):
+        # Without the return the following os.listdir() raises a FileNotFoundError.
         print(colors.BOLD + colors.RED + f"Warning: Scenario folder '{scenario_folder}' not found." + colors.END)
+        return pd.DataFrame()
     
     # Find all relevant files in the scenario folder
     aerothermal_files = [os.path.join(scenario_folder, f) for f in os.listdir(scenario_folder) if 'AeroThermalHistory' in f]
@@ -81,46 +179,91 @@ def drama_input(df_scenarios,scenario_name, pydrama_results_folder=None):
     reentry_time = df_scenarios.loc[scenario_name, 'date']
     result_list = []
 
+    # DRAMA writes two aerothermal files per component: one for the pre-break-up phase, which
+    # has no trajectory of its own and follows the compound track, and one after break-up
+    traj_index = {}
+    for traj_file in trajectory_files:
+        try:
+            traj_meta, _ = extract_metadata_and_data(traj_file)
+            traj_filename = os.path.basename(traj_file)
+            traj_base_match = re.match(r"(.+)_Trajectory", traj_filename)
+            traj_base_name = traj_base_match.group(1) if traj_base_match else traj_filename
+            traj_index[traj_base_name] = (traj_file, traj_meta.get('ObjectID'))
+        except Exception as e:
+            print(f"Error reading trajectory file {traj_file}: {e}")
+
+    # Make the compound trajectories addressable by their (purely numeric) ObjectID
+    compound_traj = {oid: f for _, (f, oid) in traj_index.items()
+                     if oid is not None and str(oid).isdigit()}
+
     # Process all file pairs and append results
     for aero_file in aerothermal_files:
         try:
             # Extract metadata and data from the aerothermal file
             aero_meta, _ = extract_metadata_and_data(aero_file)
             object_id = aero_meta.get('ObjectID')
-            
+
             # Extract base name for aerothermal file
             aero_filename = os.path.basename(aero_file)
             aero_base_match = re.match(r"(.+)_AeroThermalHistory", aero_filename)
             aero_base_name = aero_base_match.group(1) if aero_base_match else aero_filename
-            
-            for traj_file in trajectory_files:
-                try:
-                    # Extract metadata and data from the trajectory file
-                    traj_meta, _ = extract_metadata_and_data(traj_file)
-                    
-                    # Extract base name for trajectory file
-                    traj_filename = os.path.basename(traj_file)
-                    traj_base_match = re.match(r"(.+)_Trajectory", traj_filename)
-                    traj_base_name = traj_base_match.group(1) if traj_base_match else traj_filename  
 
-                    # Ensure base name and ObjectID match
-                    if traj_base_name == aero_base_name and traj_meta.get('ObjectID') == object_id:
-                        df_processed = process_files(aero_file, traj_file, reentry_time, pydrama_results_folder)
-                        df_processed['scenario'] = scenario_name  # Add scenario column for traceability
-                        df_processed['reentry_vehicle'] = reentry_vehicle
-                        result_list.append(df_processed)
-                        print('Processed Data Frame of Object:',traj_base_name)
-                    else:
-                        pass
-                except Exception as e:
-                    print(f"Error processing trajectory file {traj_file} with aerothermal file {aero_file}: {e}")
+            traj_file, phase = None, None
+            exact = traj_index.get(aero_base_name)
+            if exact is not None and exact[1] == object_id:
+                # Own trajectory available -> phase after break-up
+                traj_file, phase = exact[0], 'post_breakup'
+            else:
+                # No own trajectory -> pre-break-up phase, use the compound track
+                m = re.search(r"\.(\d+)_[0-9a-fA-F-]{36}$", aero_base_name)
+                if m and m.group(1) in compound_traj:
+                    traj_file, phase = compound_traj[m.group(1)], 'pre_breakup'
+
+            if traj_file is None:
+                print(f"  ! No trajectory file found for '{aero_base_name}' - skipped.")
+                continue
+
+            df_processed = process_files(aero_file, traj_file, reentry_time, pydrama_results_folder)
+            df_processed['Phase'] = phase
+            df_processed['scenario'] = scenario_name  # Add scenario column for traceability
+            df_processed['reentry_vehicle'] = reentry_vehicle
+            result_list.append(df_processed)
+            print(f"Processed Data Frame of Object: {aero_base_name}  [{phase}]")
         except Exception as e:
             print(f"Error processing aerothermal file {aero_file}: {e}")
 
     # 3) Combine All Results into a Single DataFrame
     if result_list:
         df_trajaerodata = pd.concat(result_list, ignore_index=True)
-        df_trajaerodata.to_csv(f"output_data/trajectory/TRAJ_RAW_{scenario_name}.csv", index=False)
+        # Join both phases into one history: the break-up sample appears in both files, so drop
+        # it once and rebuild 'd_m [kg]' over the full history
+        df_trajaerodata = (df_trajaerodata
+                           .sort_values(['ObjectID', 'Time [s]'])
+                           .drop_duplicates(subset=['ObjectID', 'Time [s]'], keep='first')
+                           .reset_index(drop=True))
+        df_trajaerodata['d_m [kg]'] = (df_trajaerodata.groupby('ObjectID')['Mass [kg]']
+                                       .diff().abs())
+
+        if material_source == 'model':
+            xml_path = find_drama_objects_xml(scenario_folder, pydrama_results_folder)
+            by_id = drama_material_by_object(xml_path)
+            if by_id:
+                print(colors.BOLD + colors.GREEN +
+                      f"Materials taken from {xml_path} (material_source = 'model')." + colors.END)
+                df_trajaerodata['Material'] = df_trajaerodata['ObjectID'].map(by_id)
+                unresolved = sorted(df_trajaerodata.loc[df_trajaerodata['Material'].isna(),
+                                                        'ObjectName'].unique())
+                if unresolved:
+                    print(colors.BOLD + colors.RED +
+                          f"No material from objects.xml for: {unresolved}" + colors.END)
+            else:
+                print(colors.BOLD + colors.RED +
+                      "material_source = 'model', but no usable objects.xml was found - "
+                      "keeping the materials from the component names." + colors.END)
+        base_name = f"{output_data_trajectory_name}{output_data_raw_name}{scenario_name}"
+        _, file_path = get_unique_filename(base_name, output_data_folder_path_trajectory, ".csv")
+        df_trajaerodata.to_csv(file_path, index=False)
+        print(colors.BOLD + colors.GREEN + f"Trajectory data written to '{os.path.normpath(file_path)}'" + colors.END)
         return df_trajaerodata
     else:
         df_trajaerodata = pd.DataFrame()
@@ -141,25 +284,20 @@ def parse_scarab_material_list(fragment_path):
                 material_map[match.group(1)] = match.group(2)
     return material_map
 
-# Fallback merge for SCARAB per-fragment time series on TIME[S], tolerating small cross-file
-# floating point precision differences: tqm.hst and masmat.hst only write 3 decimal digits while
-# mas.hst/trj.hst/arshad.hst keep full double precision, so an exact-equality merge can silently
-# drop rows (or, for very short-lived fragments, all of them) whenever two real timesteps round to
-# the same 3-decimal value. Only used when the exact merge comes back empty (see build_fragment_df).
+# Fallback merge on TIME[S] for the 3-decimal rounding of tqm.hst/masmat.hst, used only when the
+# exact merge comes back empty
 def merge_asof_on_time(left, right, tolerance=0.005):
     left = left.sort_values('TIME[S]')
     right = right.sort_values('TIME[S]')
     right_cols = [c for c in right.columns if c != 'TIME[S]']
     merged = pd.merge_asof(left, right, on='TIME[S]', direction='nearest', tolerance=tolerance)
-    # merge_asof is a left join (unmatched rows get NaN); drop those to keep the original
-    # inner-join semantics (only keep timesteps present, within tolerance, in both series)
+    # merge_asof is a left join; drop the unmatched rows to keep inner-join semantics
     return merged.dropna(subset=right_cols)
 
 def merge_exact_on_time(left, right):
     return pd.merge(left, right, on='TIME[S]')
 
-# Build a single fragment's merged dataframe from its raw per-file series, using the given merge
-# function (exact or tolerant) for every step of the chain.
+# Build one fragment's merged dataframe with the given merge function (exact or tolerant)
 def build_fragment_df(merge_fn, df_mas, df_tqm, df_trj, df_area, df_masmat):
     df_mastqm = merge_fn(df_mas[['TIME[S]', 'MASS[KG]']],
                          df_tqm[['TIME[S]', 'T_MAX[K]']])
@@ -180,8 +318,8 @@ SCARAB_MATERIAL_NAME_MAP = {
     'cfrp-m56-ud134'    : 'CFRP',
     'aa2195'            : 'AA2195',
     'copper'            : 'Cu',
-    'cc-sic-ceramic'    : 'CCSic',
-    'a316'              : 'A316',
+    'cc-sic-ceramic'    : 'CCSiC',
+    'a316'              : 'A316L',
     'inconel718'        : 'Inconel718',
     'aa2219'            : 'AA2219',
     'drama-tial6v4'     : 'Ti6Al4V',
@@ -189,13 +327,15 @@ SCARAB_MATERIAL_NAME_MAP = {
 
 # Import Scarab Files
 def scarab_input(df_scenarios, scenario_name):
-    # locate simulation data according to config.py (file_name_ext_trajectory)
+    # locate simulation data in <input_data_folder_path>/<reentry_vehicle> (SCARAB folder copied in as-is)
     reentry_vehicle = df_scenarios.loc[scenario_name, 'reentry_vehicle']
-    scenario_folder_path = file_name_ext_trajectory
+    scenario_folder_path = os.path.join(input_data_folder_path, reentry_vehicle)
 
     if not os.path.exists(scenario_folder_path):
+        # Without the return the following read_csv() raises a FileNotFoundError.
         print(colors.BOLD + colors.RED + f"Warning: Scenario folder '{scenario_folder_path}' not found." + colors.END)
-              
+        return pd.DataFrame()
+
     # import list of fragments, clean data
     df_frag_list = pd.read_csv(os.path.join(scenario_folder_path, 'frag.lst'), sep='\\s+', skiprows=1, 
                                names=['frag_id', 'frag_description', 'frag_description2', 'parent', 'status', 'child1', 'minus', 'child2'],
@@ -233,10 +373,15 @@ def scarab_input(df_scenarios, scenario_name):
             tqm_path = os.path.join(fragment_path, 'tqm.hst')
             arshad_path = os.path.join(fragment_path, 'arshad.hst')
             
-            # import and wrangle masmat data (in masmat.hst)
-            # masmat.hst's header holds numeric column IDs (1, 2, 3, ...), not material names;
-            # the actual ID -> material name mapping lives in the fragment's own material.lst
-            # and differs between fragments, so it must be resolved here, per fragment.
+            # masmat.hst has numeric column IDs; material.lst resolves them, per fragment
+            # A missing .hst file used to leave the previous fragment's dataframe in place
+            missing = [os.path.basename(p) for p in (masmat_path, mas_path, trj_path, tqm_path, arshad_path)
+                       if not os.path.isfile(p)]
+            if missing:
+                print(colors.BOLD + colors.RED +
+                      f"SCARAB: {missing} missing in '{fragment_path}' - fragment skipped." + colors.END)
+                continue
+
             if os.path.isfile(masmat_path):
                 with open(masmat_path, 'r') as f:
                     lines = f.readlines()
@@ -295,9 +440,7 @@ def scarab_input(df_scenarios, scenario_name):
                 print('No arshad.hst file found in ', fragment_path)
             
             
-            # merge all the data for a fragment: exact time match first; only fragments where that
-            # comes back empty (very short-lived fragments hitting the tqm.hst/masmat.hst 3-decimal
-            # precision limit, see build_fragment_df) get retried with a tolerant nearest-match merge
+            # Exact time match first, tolerant nearest match only if that comes back empty
             df_frag = build_fragment_df(merge_exact_on_time, df_mas, df_tqm, df_trj, df_area, df_masmat)
             if df_frag.empty:
                 df_frag = build_fragment_df(merge_asof_on_time, df_mas, df_tqm, df_trj, df_area, df_masmat)
@@ -351,8 +494,7 @@ def scarab_input(df_scenarios, scenario_name):
                                  'status'           : 'Status',
                                  'DATETIME'         : 'Datetime'}, inplace=True)
     
-    # rename material columns to match the material names in emission_factors.xlsx / material_data.xlsx
-    # any raw material.lst name not covered by SCARAB_MATERIAL_NAME_MAP is kept as-is (flagged below) instead of being dropped
+    # Rename material columns onto the material database; unmapped names are kept and flagged
     known_raw_materials = [c for c in df_fragments.columns if c in SCARAB_MATERIAL_NAME_MAP]
     reserved_cols = {'Time [s]', 'Total Fragment Mass [kg]', 'Temp [K]', 'Altitude [km]', 'Lat [deg]', 'Lon [deg]',
                       'Velocity [km/s]', 'Downrange [km]', 'ReferenceArea [m^2]', 'FragmentID', 'd_m [kg]', 'Status', 'Datetime'}
@@ -371,22 +513,14 @@ def scarab_input(df_scenarios, scenario_name):
     # compute change in material mass for every material (dm: material mass of the current time step - material mass of the former time step)
     df_fragments = df_fragments.sort_values(by=['FragmentID', 'Time [s]'])
 
-    # masmat.hst reports a material's mass as 0 in the LAST row of any fragment that goes on to
-    # fragment further (frag.lst status "Fragmentation"): that mass isn't ablated there, it is
-    # handed off whole to a child fragment (which "reappears" with the same value in its own
-    # first row). Naively diffing would misread that handoff as ablation, and along a chain of
-    # single-child fragmentations the same mass gets re-counted as "lost" at every link. Suppress
-    # the diff into that specific handoff row (Demise/Ground Impact rows are genuine and unaffected).
+    # masmat.hst reports 0 in the last row of a fragmenting parent: that mass is handed to the
+    # children, not ablated, so the diff into that handoff row must not count as mass loss
     frag_status = df_frag_list.set_index('frag_id')['status']
     is_last_row = df_fragments['Time [s]'] == df_fragments.groupby('FragmentID')['Time [s]'].transform('max')
     is_handoff_row = is_last_row & df_fragments['FragmentID'].map(frag_status).eq('Fragmentation')
 
-    # "Birth gap": a fragmenting parent's last recorded total mass is usually a bit higher than the
-    # combined first recorded mass of its children - the difference is real ablation that happened
-    # around the fragmentation event, but it falls into a gap neither side's own d_m diff covers
-    # (the parent's last diff only covers the step before; a child's first row gets no diff at all,
-    # since there is no earlier row of its own to compare against). Attribute that gap mass to the
-    # parent's handoff row so total ablated mass is conserved end to end.
+    # Birth gap: the parent's last mass minus the children's first masses is real ablation that
+    # neither side's diff covers, so book it on the parent's handoff row
     first_mass_by_frag = df_fragments.groupby('FragmentID')['Total Fragment Mass [kg]'].first()
     children_by_parent = df_frag_list.loc[df_frag_list['parent'] != '-'].groupby('parent')['frag_id'].apply(list)
     for parent_id, children in children_by_parent.items():
@@ -400,14 +534,8 @@ def scarab_input(df_scenarios, scenario_name):
         if gap > 0:
             df_fragments.loc[parent_mask, 'd_m [kg]'] = df_fragments.loc[parent_mask, 'd_m [kg]'].fillna(0) + gap
 
-    # At a handoff row, masmat.hst reports every material as 0 (the fragmentation-boundary format
-    # artifact described above) even though the row's Total Fragment Mass shows a normal, real
-    # step of ablation - the same kind of loss as any other row, just not attributed per material
-    # by the file itself. A plain diff would misread that as the entire last known material mass
-    # ablating in one step; simply zeroing it (as before) is safe but throws the real mass away.
-    # Attribute it instead to each material in proportion to the parent's own material composition
-    # one row earlier - a defensible estimate, since composition rarely shifts much within a single
-    # ~1s step. Covers ~99.9% of this scenario's previously-unattributed handoff-row mass.
+    # A handoff row carries real ablation but no per-material split, so distribute it over the
+    # materials in the composition of the previous row
     prev_material = df_fragments.groupby('FragmentID')[material_cols].shift(1)
     prev_material_sum = prev_material.sum(axis=1)
     handoff_total_dm = df_fragments['d_m [kg]']  # already includes the birth-gap addition above
@@ -434,23 +562,29 @@ def scarab_input(df_scenarios, scenario_name):
     if df_fragments.empty:
         print("No valid results were generated.")
     else:
-        df_fragments.to_csv(f"output_data/trajectory/TRAJ_RAW_{scenario_name}.csv", index=False)
+        base_name = f"{output_data_trajectory_name}{output_data_raw_name}{scenario_name}"
+        _, file_path = get_unique_filename(base_name, output_data_folder_path_trajectory, ".csv")
+        df_fragments.to_csv(file_path, index=False)
+        print(colors.BOLD + colors.GREEN + f"Trajectory data written to '{os.path.normpath(file_path)}'" + colors.END)
         return df_fragments
     
 # Import Debrisk Files
 def debrisk_input(df_scenarios, scenario_name):
-    # locate simulation data according to config.py (file_name_ext_trajectory)
+    # locate simulation data in <input_data_folder_path>/<reentry_vehicle> (DEBRISK folder copied in as-is)
     reentry_vehicle = df_scenarios.loc[scenario_name, 'reentry_vehicle']
-    scenario_folder_path = file_name_ext_trajectory
+    scenario_folder_path = os.path.join(input_data_folder_path, reentry_vehicle)
 
     if not os.path.exists(scenario_folder_path):
+        # Without the return the following os.listdir() raises a FileNotFoundError.
         print(colors.BOLD + colors.RED + f"Warning: Scenario folder '{scenario_folder_path}' not found." + colors.END)
+        return pd.DataFrame()
 
-    # the DEBRISK output .dat file is named after the DEBRISK run (e.g. the vehicle), not
-    # necessarily after the scenario, so find it by extension instead of assuming a name match
+    # The .dat file is named after the DEBRISK run, not the scenario, so find it by extension
     dat_files = [f for f in os.listdir(scenario_folder_path) if f.endswith('.dat')]
     if not dat_files:
+        # Without the return the following dat_files[0] raises an IndexError.
         print(colors.BOLD + colors.RED + f"Warning: No .dat file found in '{scenario_folder_path}'." + colors.END)
+        return pd.DataFrame()
 
     with open(os.path.join(scenario_folder_path, dat_files[0]), "r") as f:
         lines = f.readlines()
@@ -463,17 +597,38 @@ def debrisk_input(df_scenarios, scenario_name):
     column_names.append("zone")
     column_names.append("material")
 
+    # Materials optionally from the DEBRISK result file instead of the component name
+    material_by_component = {}
+    if material_source == 'model':
+        material_by_component = debrisk_material_by_component(scenario_folder_path)
+        if material_by_component:
+            print(colors.BOLD + colors.GREEN +
+                  f"DEBRISK: {len(material_by_component)} materials read from the result files "
+                  f"(material_source = 'model')." + colors.END)
+        else:
+            print(colors.BOLD + colors.RED +
+                  "material_source = 'model', but no materials could be read from the DEBRISK "
+                  "result files - falling back to the component names." + colors.END)
+
     # initializing
     data = []
     current_zone = None
-    current_material = None 
+    current_material = None
 
     # go through all the lines of the file
     for line in lines:
         if line.startswith("ZONE"):
-            # extract zone and material names
-            current_zone = line.split("T='")[1].split("'")[0].split("_-_")[0]
-            current_material = line.split("T='")[1].split("'")[0].split("_-_")[1]
+            # Zone name of the .dat file, e.g. 'Engine_-_Inconel718'
+            current_full = line.split("T='")[1].split("'")[0]
+            # Component and material from the name; without '_-_' the material stays empty
+            parts = current_full.split("_-_")
+            current_zone = parts[0]
+            current_material = parts[1] if len(parts) > 1 else None
+            if current_material is None and material_source != 'model':
+                print(colors.BOLD + colors.RED +
+                      f"DEBRISK: component '{current_full}' carries no '_-_' material suffix." + colors.END)
+            if material_source == 'model':
+                current_material = material_by_component.get(current_full)
         elif line.startswith("#") or line.startswith("VARIABLES") or line.strip() == "":
             continue
         else:
@@ -538,7 +693,10 @@ def debrisk_input(df_scenarios, scenario_name):
     if df_trajaerodata.empty:
         print("No valid results were generated.")
     else:
-        df_trajaerodata.to_csv(f"output_data/trajectory/TRAJ_RAW_{scenario_name}.csv", index=False)
+        base_name = f"{output_data_trajectory_name}{output_data_raw_name}{scenario_name}"
+        _, file_path = get_unique_filename(base_name, output_data_folder_path_trajectory, ".csv")
+        df_trajaerodata.to_csv(file_path, index=False)
+        print(colors.BOLD + colors.GREEN + f"Trajectory data written to '{os.path.normpath(file_path)}'" + colors.END)
         return df_trajaerodata
 
 # Load External Trajectory Data
@@ -573,7 +731,8 @@ def compress_and_save_trajectory_results(output_data, scenario_name):
                         interval_df = pd.DataFrame(interval_data)
                         interval_avg = interval_df[['p_tot (Pa)', 'rho', 'T_rad_equil_comb']].mean()
                         averaged_row = output_data.iloc[[idx]].copy()
-                        averaged_row[['p_tot (Pa)', 'rho', 'T_rad_equil_comb']] = interval_avg
+                        # .values: assigning the Series itself raises KeyError: 0 in pandas
+                        averaged_row[['p_tot (Pa)', 'rho', 'T_rad_equil_comb']] = interval_avg.values
                         compressed_df = pd.concat([compressed_df, averaged_row], ignore_index=True)
                         current_time += compress_interval
                         interval_data = []
@@ -602,7 +761,8 @@ def compress_and_save_trajectory_results(output_data, scenario_name):
                         interval_df = pd.concat(interval_data, ignore_index=True)
                         interval_avg = interval_df[['p_tot (Pa)', 'rho', 'T_rad_equil_comb']].mean()
                         averaged_row = height_data.iloc[[-1]].copy()
-                        averaged_row[['p_tot (Pa)', 'rho', 'T_rad_equil_comb']] = interval_avg
+                        # .values: assigning the Series itself raises KeyError: 0 in pandas
+                        averaged_row[['p_tot (Pa)', 'rho', 'T_rad_equil_comb']] = interval_avg.values
                         compressed_df = pd.concat([compressed_df, averaged_row], ignore_index=True)
                     
                     height -= compress_interval*1000
@@ -752,10 +912,10 @@ def compress_trajaerodata_dataframe(df_trajaerodata, compress_method, compress_i
         # Define fields for grouping
         grouping_fields = ['ObjectID', bin_field, 'LatBin', 'LonBin']
 
-        # Define aggregation rules
+        # Aggregation rules; every state value has to come from the SAME sample of the bin
         agg_dict = {
-            'Time [s]': 'first',
-            'Altitude [km]': 'first',
+            'Time [s]': 'last',
+            'Altitude [km]': 'last',
             'Lat [deg]': 'last',
             'Lon [deg]': 'last',
             'Velocity [km/s]': 'last',
@@ -767,10 +927,13 @@ def compress_trajaerodata_dataframe(df_trajaerodata, compress_method, compress_i
             'Part': 'last',
             'Material': 'last',
             'ReferenceArea [m^2]': 'last',
+            'Phase': 'last',
             'scenario': 'last',
             'reentry_vehicle': 'last',
             'd_m [kg]': 'sum',
         }
+        # Only aggregate what this input source delivers; 'Phase' comes from drama_input() only
+        agg_dict = {k: v for k, v in agg_dict.items() if k in group_df.columns}
 
         # Perform grouping and aggregation
         compressed_group = (
@@ -805,9 +968,10 @@ def compress_trajaerodata_dataframe(df_trajaerodata, compress_method, compress_i
     )
 
     # Save and return
-    output_path = f"output_data/trajectory/TRAJ_COMP_{scenario_name}.csv"
+    base_name = f"{output_data_trajectory_name}{output_data_compression_name}{scenario_name}"
+    _, output_path = get_unique_filename(base_name, output_data_folder_path_trajectory, ".csv")
     compressed.to_csv(output_path, index=False)
-    print(f"Compressed trajectory saved to: {output_path}")
+    print(f"Compressed trajectory saved to: {os.path.normpath(output_path)}")
 
     return compressed
 
@@ -904,9 +1068,10 @@ def compress_trajaerodata_scarab_dataframe(df_trajaerodata, compress_method, com
     )
 
     # Save and return
-    output_path = f"output_data/trajectory/TRAJ_COMP_{scenario_name}.csv"
+    base_name = f"{output_data_trajectory_name}{output_data_compression_name}{scenario_name}"
+    _, output_path = get_unique_filename(base_name, output_data_folder_path_trajectory, ".csv")
     compressed.to_csv(output_path, index=False)
-    print(f"Compressed trajectory saved to: {output_path}")
+    print(f"Compressed trajectory saved to: {os.path.normpath(output_path)}")
 
     return compressed
 
@@ -1042,6 +1207,27 @@ def save_emission_results(emission_results, scenario_name,calculation_method):
     except Exception as e:
         handle_error(e, "save_emission_results", "Error finding required data.")
 
+# Column for the material-combustion temperature (filled in emissions.py; unused by emission-factor paths)
+COL_T_AB = "Temp ab [K]"
+
+
+def aggregate_t_ab(values):
+    """Aggregates 'Temp ab [K]' during grouping: averages purely numeric values, otherwise keeps them as text to avoid losing information."""
+    vals = [v for v in values if pd.notna(v)]
+    if not vals:
+        return pd.NA
+    numbers = []
+    for v in vals:
+        try:
+            numbers.append(float(v))
+        except (TypeError, ValueError):
+            numbers = None
+            break
+    if numbers is not None:
+        return sum(numbers) / len(numbers)
+    return "; ".join(dict.fromkeys(str(v) for v in vals))
+
+
 def filter_emission_data(df, compress_method, compress_interval, compress_lat, compress_lon):
     required_columns = ['Time [s]', 'Altitude [km]', 'Lat [deg]', 'Lon [deg]', 
                         'Velocity [km/s]', 'Datetime', 'scenario', 'reentry_vehicle', 'd_m [kg]']
@@ -1066,22 +1252,29 @@ def filter_emission_data(df, compress_method, compress_interval, compress_lat, c
     df_copy['Lon [deg]'] = (df_copy['Lon [deg]'] // compress_lon) * compress_lon
     
     # Group by the rounded values and aggregate the species columns by sum
-    df_grouped = df_copy.groupby(
-        ['Time [s]', 'Altitude [km]', 'Lat [deg]', 'Lon [deg]']
-    ).agg({
+    agg_map = {
         'Velocity [km/s]': 'mean',
         'Downrange [km]': 'mean',
         'Temp [K]': 'mean',
+    }
+    # Carry the combustion temperature along, if the calculation logged it
+    if COL_T_AB in df_copy.columns:
+        agg_map[COL_T_AB] = aggregate_t_ab
+    agg_map.update({
         'Datetime': 'first',
         'scenario': 'first',
         'reentry_vehicle': 'first',
         'd_m [kg]': 'sum',
         **{col: 'sum' for col in species_columns}
-    }).reset_index()
+    })
+
+    df_grouped = df_copy.groupby(
+        ['Time [s]', 'Altitude [km]', 'Lat [deg]', 'Lon [deg]']
+    ).agg(agg_map).reset_index()
 
     df_grouped['total_sum_emissions'] = df_grouped[species_columns].sum(axis=1)
 
-    # Remove rows with 0 emissions
+    # Drop rows without emissions
     df_grouped = df_grouped.loc[df_grouped['total_sum_emissions'] > 0]
 
     cols = list(df_grouped.columns)
@@ -1163,7 +1356,6 @@ def calculate_atmosphere_data(row):
     # Total mass density (kg/m3)
     rho_atm = handle_nan(atmosphere[0, 0])
     t_atm = handle_nan(atmosphere[0, 10])
-    p_atm = rho_atm * t_atm * R
     
     # Raw Density Data of Species (in molecules per m3)
     densities = {
@@ -1189,17 +1381,26 @@ def calculate_atmosphere_data(row):
 
     # Calculate total number density (sum of all molecular number densities)
     total_number_density = sum(densities.values())
-    
+
+    # Pressure from the mixture itself (p = n * k_B * T); the old p = rho * R * T with dry-air R deviates increasingly above ~90 km (-2.5% at 100 km, -10% at 120 km)
+    p_atm = total_number_density * boltzmann_constant * t_atm
+
     # Calculate molar fractions (mol/mol)
     molar_fractions = {species: densities[species] / total_number_density for species in densities}
     
     # Convert molar fractions dictionary to DataFrame
     df_atm_molarfractions = pd.DataFrame([molar_fractions])
 
-    # Calculate speed of sound (m/s)
-    #print(R)
-    c_atm = np.sqrt(kappa * R * t_atm)
+    # Speed of sound from the local mixture (not dry-air kappa=1.4/R=287.058): mean molar mass and isentropic exponent follow from the NRLMSIS composition (cv = 3/2 R monatomic, 5/2 R diatomic, vibration neglected)
+    molar_mass_mix = sum(densities[s] * molar_masses[s] for s in densities) / total_number_density
+    r_specific = universal_gas_constant / molar_mass_mix
+    cv_over_r = sum(densities[s] * (1.5 if s in monatomic_species else 2.5)
+                    for s in densities) / total_number_density
+    kappa_mix = 1.0 + 1.0 / cv_over_r
+    c_atm = np.sqrt(kappa_mix * r_specific * t_atm)
     
-    return rho_atm, t_atm, p_atm, c_atm, df_atm_massfractions, df_atm_molarfractions
+    # kappa_mix and r_specific are passed along so compute_shockwave() uses the local mixture instead of kappa=1.4/R=287.058
+    return (rho_atm, t_atm, p_atm, c_atm, df_atm_massfractions, df_atm_molarfractions,
+            kappa_mix, r_specific)
     
 #endregion

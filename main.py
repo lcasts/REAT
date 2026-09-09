@@ -1,8 +1,8 @@
 # 0. Import Libraries and Functions
 from input_data.config import *
-from scripts import trajectory
-from scripts import emissions
-from scripts import data_processing
+from scripts import trajectory as trajectory
+from scripts import emissions as emissions
+from scripts import data_processing as data_processing
 import pandas as pd
 from ast import literal_eval
 
@@ -79,7 +79,9 @@ def main():
             print('df_trajaerodata',df_trajaerodata)
 
         except Exception as e:
+            # Without the continue the emission block runs on the previous scenario's data
             print(f"Error calculating trajectory for scenario {scenario_name}: {e}")
+            continue
 
         # 2.2) Calculating Emissions with Emission Factors or NASA CEA
         try: 
@@ -104,11 +106,22 @@ def main():
                     filtered_emission_results = data_processing.filter_emission_data(emission_results, compress_method, compress_interval, compress_lat, compress_lon)
                     data_processing.save_emission_results(filtered_emission_results, scenario_name,'CEA')
                     emissions.clean_up()
-                if use_nasa_cea and (traj_inp_data == "OwnScarab"):   
+                if use_nasa_cea and (traj_inp_data == "OwnScarab"):
                     #print(df_trajectory_results_cleaned, df_phases, df_launch_vehicles_engines, df_launch_vehicles, scenario_name, df_emission_factors)
                     emission_results = emissions.run_nasa_cea_scarab(df_trajaerodata, df_emission_factors, df_material_data, scenario_name)
                     filtered_emission_results = data_processing.filter_emission_data(emission_results, compress_method, compress_interval, compress_lat, compress_lon)
                     data_processing.save_emission_results(filtered_emission_results, scenario_name,'CEA')
+                    emissions.clean_up()
+                # c) Calculate Emissions by Cantera material combustion
+                if use_cantera and (traj_inp_data == "PyDrama" or traj_inp_data == "OwnDrama" or traj_inp_data == "OwnDebrisk"):
+                    emission_results = emissions.run_cantera(df_trajaerodata, df_emission_factors, df_material_data, scenario_name)
+                    filtered_emission_results = data_processing.filter_emission_data(emission_results, compress_method, compress_interval, compress_lat, compress_lon)
+                    data_processing.save_emission_results(filtered_emission_results, scenario_name,'Cantera')
+                    emissions.clean_up()
+                if use_cantera and (traj_inp_data == "OwnScarab"):
+                    emission_results = emissions.run_cantera_scarab(df_trajaerodata, df_emission_factors, df_material_data, scenario_name)
+                    filtered_emission_results = data_processing.filter_emission_data(emission_results, compress_method, compress_interval, compress_lat, compress_lon)
+                    data_processing.save_emission_results(filtered_emission_results, scenario_name,'Cantera')
                     emissions.clean_up()
                 if traj_inp_data == "Ballistic" or traj_inp_data == "OwnBallistic":
                     if nox_method == "nasa_cea": 
@@ -130,6 +143,8 @@ def main():
                     (use_emission_factors and traj_inp_data == "OwnScarab") or
                     (use_nasa_cea and traj_inp_data in ["PyDrama", "OwnDrama", "OwnDebrisk"]) or
                     (use_nasa_cea and traj_inp_data == "OwnScarab") or
+                    (use_cantera and traj_inp_data in ["PyDrama", "OwnDrama", "OwnDebrisk"]) or
+                    (use_cantera and traj_inp_data == "OwnScarab") or
                     (traj_inp_data in ["Ballistic", "OwnBallistic"])
                 ):
                     print('Invalid combination. Please check your config settings')

@@ -41,7 +41,7 @@ Jan-Steffen Fischer and Sebastian Winterhoff and Stefanos Fasoulas, Re-entry Emi
 - Modify the `config.py` file to define your analysis:
   - **Scenarios**: Specify scenarios to process (`user_defined_scenarios` or all scenarios).
   - **Simulation**: Adjust numerical methods, tolerances, and simulation duration.
-  - **Emission settings**: Choose between simplified emission factors or NASA CEA for structural emission calculations and NASA CEA or Cantera for NOx emission calculation.
+  - **Emission settings**: Choose between simplified emission factors or NASA CEA or Cantera (preliminary) for structural emission calculations and NASA CEA or Cantera for NOx emission calculation.
   - **Data compression**: Optimize runtime by compressing atmospheric data for ballistic trajectory calculation.
 
 ### 3. **Run the Program**
@@ -144,7 +144,8 @@ Jan-Steffen Fischer and Sebastian Winterhoff and Stefanos Fasoulas, Re-entry Emi
       - PyDrama: Trajectory calculation using the python package of DRAMA.
          - Using an existing DRAMA model with the materials.xml and objects.xml
          - Using a generic model to change mass and dimensions within the scenarios.xlsx file
-         - Please make sure to name the systems each with their material seperated with "_-_" (e.g. RP1_Tank_-_AA2198) 
+         - Please make sure to use own materials for emission calculation to indicate the name of the material in the name of the systems each with their material seperated with "_-_" (e.g. RP1_Tank_-_AA2198) 
+         - Alternatively the material can be extracted from DRAMA or DEBRISK Inputs. Please match them in the config to a material from the material_data.xlsx 
       - OwnDrama: Trajectory calculation based on existing DRAMA files. Please make sure the folder is named as the vehicle.
          - Please make sure to name the systems each with their material seperated with "_-_" (e.g. RP1_Tank_-_AA2198)
       - OwnScarab: Trajectory calculation based on existing SCARAB files. Please make sure the folder is named as the vehicle and includes all the fragment folders (1.1, 1.2, 2.1, ...) and output files.
@@ -152,12 +153,11 @@ Jan-Steffen Fischer and Sebastian Winterhoff and Stefanos Fasoulas, Re-entry Emi
 
 2. **Emission Calculation**:
    - For PyDrama, OwnDrama, OwnScarab and OwnDebrisk runs
-      - Emission calculation with either emission factors or NASA CEA TP (if added, can also be changed to HP), defined with either "use_emission_factors" or "use_nasa_cea" set as true
+      - Emission calculation with either emission factors or NASA CEA TP (if added, can also be changed to HP), defined with either "use_emission_factors" or "use_nasa_cea" set as true.
    - For OwnBallistic and Ballistic trajectories:
-      - NOx Emission calculation with either Cantera HP or NASA CEA HP (if added), defined with the "nox_method" variable
+      - NOx Emission calculation with either Cantera HP or NASA CEA Shock or HP (if added), defined with the "nox_method" variable.
 
 ## **Acknowledgments**
-
 - The balistic trajectory calculation code is partly based on a lecture from Adam Pagan and Georg Herdrich
 
 - The authors would like to gratefully acknowledge funding by the German Space Agency DLR, funding reference 50RL2180 from the Federal Ministry for Economic Affairs and Climate Action of Germany based on a decision of the German Bundestag.
@@ -169,9 +169,9 @@ Jan-Steffen Fischer and Sebastian Winterhoff and Stefanos Fasoulas, Re-entry Emi
 
 ---
 
-## Authors
-
+## Contributors
 - **Jan-Steffen Fischer** - [lcasts](https://github.com/lcasts)
 - **Sebastian Winterhoff** - [SWinterhoff](https://github.com/SWinterhoff)
 - **Felix Dorn**
+- **Tinus Breitinger**
 - **Stefanos Fasoulas**
