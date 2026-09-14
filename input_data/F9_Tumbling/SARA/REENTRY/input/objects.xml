@@ -15,7 +15,7 @@
             <Green>128</Green>
             <Blue>128</Blue>
         </color>
-        <mass>585.0</mass>
+        <mass>641.4893617</mass>
         <material>drama-AA7075</material>
         <relativePosition>
             <cartX>0.0</cartX>
@@ -48,7 +48,7 @@
             <Green>128</Green>
             <Blue>128</Blue>
         </color>
-        <mass>592.3709657</mass>
+        <mass>649.5720904</mass>
         <material>drama-AA7075</material>
         <relativePosition>
             <cartX>2.1</cartX>
@@ -81,7 +81,7 @@
             <Green>128</Green>
             <Blue>128</Blue>
         </color>
-        <mass>382.6290343</mass>
+        <mass>419.5768461</mass>
         <material>drama-AA7075</material>
         <relativePosition>
             <cartX>6.65</cartX>
@@ -114,7 +114,7 @@
             <Green>128</Green>
             <Blue>128</Blue>
         </color>
-        <mass>195.0</mass>
+        <mass>213.8297872</mass>
         <material>drama-AA7075</material>
         <relativePosition>
             <cartX>9.44</cartX>
@@ -148,7 +148,7 @@
             <Green>128</Green>
             <Blue>128</Blue>
         </color>
-        <mass>440.0</mass>
+        <mass>440</mass>
         <material>drama-Inconel718</material>
         <relativePosition>
             <cartX>10.7</cartX>
@@ -168,7 +168,7 @@
         <temperature>300.0</temperature>
     </object>
     <object>
-        <name>Nozzle - CC</name>
+        <name>Nozzle - CCSiC</name>
         <uniqueID>234ddda3-8f1f-435c-93bb-af537075fbf1</uniqueID>
         <primitive>
             <cone>
@@ -181,7 +181,7 @@
             <Green>128</Green>
             <Blue>128</Blue>
         </color>
-        <mass>110.0</mass>
+        <mass>110</mass>
         <material>drama-Carbon-Carbon</material>
         <relativePosition>
             <cartX>13.1</cartX>
@@ -215,7 +215,7 @@
             <Green>128</Green>
             <Blue>128</Blue>
         </color>
-        <mass>273.0</mass>
+        <mass>299.3617021</mass>
         <material>drama-A316</material>
         <relativePosition>
             <cartX>10.7</cartX>
@@ -249,7 +249,7 @@
             <Green>128</Green>
             <Blue>128</Blue>
         </color>
-        <mass>195.0</mass>
+        <mass>213.8297872</mass>
         <material>drama-Copper</material>
         <relativePosition>
             <cartX>-0.15</cartX>
@@ -283,7 +283,7 @@
             <Green>128</Green>
             <Blue>128</Blue>
         </color>
-        <mass>195.0</mass>
+        <mass>213.8297872</mass>
         <material>drama-Copper</material>
         <relativePosition>
             <cartX>-0.15</cartX>
@@ -316,7 +316,7 @@
             <Green>128</Green>
             <Blue>128</Blue>
         </color>
-        <mass>39.0</mass>
+        <mass>42.7659574</mass>
         <material>drama-HC-CFRP-8ply</material>
         <relativePosition>
             <cartX>10.0</cartX>
@@ -349,7 +349,7 @@
             <Green>128</Green>
             <Blue>128</Blue>
         </color>
-        <mass>39.0</mass>
+        <mass>42.7659574</mass>
         <material>drama-HC-CFRP-8ply</material>
         <relativePosition>
             <cartX>10.0</cartX>
@@ -382,7 +382,7 @@
             <Green>128</Green>
             <Blue>128</Blue>
         </color>
-        <mass>39.0</mass>
+        <mass>42.7659574</mass>
         <material>drama-HC-CFRP-8ply</material>
         <relativePosition>
             <cartX>10.0</cartX>
@@ -402,7 +402,7 @@
         <temperature>300.0</temperature>
     </object>
     <object>
-        <name>LVA - CFRP_AA7075</name>
+        <name>LVA - LVA</name>
         <uniqueID>e9d99545-37ad-460e-9ecf-171864df323f</uniqueID>
         <primitive>
             <cone>
@@ -415,7 +415,7 @@
             <Green>128</Green>
             <Blue>128</Blue>
         </color>
-        <mass>325.0</mass>
+        <mass>356.3829787</mass>
         <material>drama-AA7075</material>
         <relativePosition>
             <cartX>-0.85</cartX>
@@ -449,7 +449,7 @@
             <Green>128</Green>
             <Blue>128</Blue>
         </color>
-        <mass>195.0</mass>
+        <mass>213.8297872</mass>
         <material>drama-TiAl6v4</material>
         <relativePosition>
             <cartX>0.0</cartX>
@@ -473,7 +473,7 @@
         <uniqueID>d22168ec-5f6a-45b6-a3e1-4dea0c33b68c</uniqueID>
         <connectionArea>0.0</connectionArea>
         <breakUpTriggers>
-            <altitude>80000.0</altitude>
+            <altitude>78600.0</altitude>
         </breakUpTriggers>
     </connection-to>
     <connection-to>
@@ -481,7 +481,7 @@
         <uniqueID>9ff8682a-944e-40ae-91ad-78d9e9aed04c</uniqueID>
         <connectionArea>0.0</connectionArea>
         <breakUpTriggers>
-            <altitude>80000.0</altitude>
+            <altitude>78600.0</altitude>
         </breakUpTriggers>
     </connection-to>
     <connection-to>
@@ -489,7 +489,7 @@
         <uniqueID>a6620391-8a0d-41f3-ad3f-be686948d07c</uniqueID>
         <connectionArea>0.0</connectionArea>
         <breakUpTriggers>
-            <altitude>80000.0</altitude>
+            <altitude>78600.0</altitude>
         </breakUpTriggers>
     </connection-to>
     <connection-to>
@@ -497,7 +497,7 @@
         <uniqueID>24b4694a-0cb3-471f-a073-f280a8198883</uniqueID>
         <connectionArea>0.0</connectionArea>
         <breakUpTriggers>
-            <altitude>80000.0</altitude>
+            <altitude>78600.0</altitude>
         </breakUpTriggers>
     </connection-to>
     <connection-to>
@@ -505,7 +505,7 @@
         <uniqueID>e9d99545-37ad-460e-9ecf-171864df323f</uniqueID>
         <connectionArea>0.0</connectionArea>
         <breakUpTriggers>
-            <altitude>80000.0</altitude>
+            <altitude>78600.0</altitude>
         </breakUpTriggers>
     </connection-to>
     <connection-to>
@@ -513,7 +513,7 @@
         <uniqueID>7722af17-9964-40d8-b332-434c48dba4c4</uniqueID>
         <connectionArea>0.0</connectionArea>
         <breakUpTriggers>
-            <altitude>80000.0</altitude>
+            <altitude>78600.0</altitude>
         </breakUpTriggers>
     </connection-to>
     <connection-to>
@@ -521,7 +521,7 @@
         <uniqueID>8f7f5459-a642-4c4f-bf14-483ee790b7ab</uniqueID>
         <connectionArea>0.0</connectionArea>
         <breakUpTriggers>
-            <altitude>80000.0</altitude>
+            <altitude>78600.0</altitude>
         </breakUpTriggers>
     </connection-to>
     <connection-to>
@@ -529,7 +529,7 @@
         <uniqueID>9467468f-9a2c-416f-bcac-ef3329fe134c</uniqueID>
         <connectionArea>0.0</connectionArea>
         <breakUpTriggers>
-            <altitude>80000.0</altitude>
+            <altitude>78600.0</altitude>
         </breakUpTriggers>
     </connection-to>
     <connection-to>
@@ -537,7 +537,7 @@
         <uniqueID>f2883d45-6322-4510-9eb8-4ee85a9e0431</uniqueID>
         <connectionArea>0.0</connectionArea>
         <breakUpTriggers>
-            <altitude>80000.0</altitude>
+            <altitude>78600.0</altitude>
         </breakUpTriggers>
     </connection-to>
     <connection-to>
@@ -545,7 +545,7 @@
         <uniqueID>b676967a-5c5d-4659-afd6-cb6a0189416a</uniqueID>
         <connectionArea>0.0</connectionArea>
         <breakUpTriggers>
-            <altitude>80000.0</altitude>
+            <altitude>78600.0</altitude>
         </breakUpTriggers>
     </connection-to>
     <connection-to>
@@ -553,7 +553,7 @@
         <uniqueID>a63a43c9-ba81-440e-9845-932e0de2741e</uniqueID>
         <connectionArea>0.0</connectionArea>
         <breakUpTriggers>
-            <altitude>80000.0</altitude>
+            <altitude>78600.0</altitude>
         </breakUpTriggers>
     </connection-to>
     <connection-to>
@@ -561,7 +561,7 @@
         <uniqueID>234ddda3-8f1f-435c-93bb-af537075fbf1</uniqueID>
         <connectionArea>0.0</connectionArea>
         <breakUpTriggers>
-            <altitude>80000.0</altitude>
+            <altitude>78600.0</altitude>
         </breakUpTriggers>
     </connection-to>
     <connection-to>
@@ -569,7 +569,7 @@
         <uniqueID>824e1ae0-79b2-4d19-8db1-b853075120c9</uniqueID>
         <connectionArea>0.0</connectionArea>
         <breakUpTriggers>
-            <altitude>80000.0</altitude>
+            <altitude>78600.0</altitude>
         </breakUpTriggers>
     </connection-to>
 </objects>

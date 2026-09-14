@@ -103,27 +103,55 @@ def check_aero_schedule():
         return False
     if aero_schedule_basis not in ('altitude', 'time'):
         raise ValueError(f"aero_schedule_basis must be None, 'altitude' or 'time', not {aero_schedule_basis!r}.")
-    if len(aero_schedule_x) != len(aero_schedule_alpha):
-        raise ValueError("aero_schedule_x and aero_schedule_alpha need the same length.")
-    if not (len(aero_alpha) == len(aero_cd) == len(aero_ldr)):
-        raise ValueError("aero_alpha, aero_cd and aero_ldr need the same length.")
-    if min(aero_cd) <= 0 or aero_reference_area <= 0:
-        raise ValueError("aero_cd and aero_reference_area must be positive.")
+    tables = get_aero_tables()
+    if len(tables['schedule_x']) != len(tables['schedule_alpha']):
+        raise ValueError("The schedule sheet needs one alpha per breakpoint.")
     print(colors.BOLD + colors.GREEN +
           f"Ballistic: angle of attack schedule active over {aero_schedule_basis}, "
-          f"alpha {min(aero_schedule_alpha)}...{max(aero_schedule_alpha)} deg, "
-          f"C_D {min(aero_cd)}...{max(aero_cd)}, L/D {min(aero_ldr)}...{max(aero_ldr)}." + colors.END)
+          f"alpha {tables['schedule_alpha'].min()}...{tables['schedule_alpha'].max()} deg, "
+          f"C_D {tables['c_d'].min()}...{tables['c_d'].max()}, "
+          f"L/D {tables['ldr'].min()}...{tables['ldr'].max()}, "
+          f"from {file_name_aero}." + colors.END)
     return True
 
-def aero_state(time_s, altitude_m, mass, c_b_default, ldr_default, active):
-    """Angle of attack, C_D, L/D and ballistic coefficient of the current step."""
+def aero_state(time_s, altitude_m, mass, c_b_default, ldr_default, active, a_ref):
+    """Angle of attack, C_D, L/D and ballistic coefficient of the current step.
+
+    a_ref is the fixed area the C_D table is normalised with (scenario 'A_ref').
+    """
     if not active:
         return np.nan, np.nan, ldr_default, c_b_default
+    tables = get_aero_tables()
     x = altitude_m / 1000 if aero_schedule_basis == 'altitude' else time_s
-    alpha = interpolate_schedule(x, aero_schedule_x, aero_schedule_alpha, aero_interpolation)
-    c_d = interpolate_schedule(alpha, aero_alpha, aero_cd, aero_interpolation)
-    ldr = interpolate_schedule(alpha, aero_alpha, aero_ldr, aero_interpolation)
-    return alpha, c_d, ldr, mass / (c_d * aero_reference_area)
+    alpha = interpolate_schedule(x, tables['schedule_x'], tables['schedule_alpha'], aero_interpolation)
+    c_d = interpolate_schedule(alpha, tables['alpha'], tables['c_d'], aero_interpolation)
+    ldr = interpolate_schedule(alpha, tables['alpha'], tables['ldr'], aero_interpolation)
+    return alpha, c_d, ldr, mass / (c_d * a_ref)
+
+
+def scenario_reference_areas(scenario, scenario_name, aero_active):
+    """Broadside area A_ref and nose-on area A_ref_axial [m^2] from the scenario sheet."""
+    a_ref = pd.to_numeric(scenario.get('A_ref', np.nan), errors='coerce')
+    a_ref_axial = pd.to_numeric(scenario.get('A_ref_axial', np.nan), errors='coerce')
+    if aero_active and not a_ref > 0:
+        raise ValueError(f"Scenario '{scenario_name}': A_ref = {scenario.get('A_ref', None)} is not positive, "
+                         f"the angle of attack schedule needs it for c_b = mass / (C_D * A_ref).")
+    if not a_ref > 0:
+        return np.nan, np.nan
+    if not a_ref_axial >= 0:
+        print(colors.BOLD + colors.RED + f"Scenario '{scenario_name}': A_ref_axial could not be read as a "
+              f"number, the reference area follows A_ref * |sin(alpha)| only." + colors.END)
+        a_ref_axial = 0.0
+    return float(a_ref), float(a_ref_axial)
+
+
+def step_reference_area(alpha, a_ref, a_ref_axial):
+    """Reference area of the step for the NOx air mass: projected at alpha, else constant A_ref."""
+    if not a_ref > 0:
+        return np.nan
+    if np.isfinite(alpha):
+        return float(projected_reference_area(alpha, a_ref, a_ref_axial))
+    return a_ref
 
 def calculate_heat_flux_convective(c, nose_radius, density, velocity):
     return (c / np.sqrt(nose_radius) * density**0.5 * velocity**3) / 1000
@@ -158,9 +186,9 @@ def coordinates(inc, lat_1, lon_1, dx):
 
 def initialize_parameters(args):
     """Initialize the parameters for the first time step."""
-    (ballistic_coefficient, nose_radius, velocity, flight_path_angle, surface_emissivity, lift_to_drag_ratio, altitude, date, lat, lon, delta_t, mass, aero_active) = args
+    (ballistic_coefficient, nose_radius, velocity, flight_path_angle, surface_emissivity, lift_to_drag_ratio, altitude, date, lat, lon, delta_t, mass, aero_active, a_ref, a_ref_axial) = args
     alpha, c_d, lift_to_drag_ratio, ballistic_coefficient = aero_state(
-        0.0, altitude, mass, ballistic_coefficient, lift_to_drag_ratio, aero_active)
+        0.0, altitude, mass, ballistic_coefficient, lift_to_drag_ratio, aero_active, a_ref)
     v_x, v_y = calculate_velocity_components(velocity, flight_path_angle)
     
     date = datetime.strptime(date, "%Y-%m-%dT%H:%M:%S")
@@ -204,6 +232,7 @@ def initialize_parameters(args):
         'AoA [deg]': alpha,
         'C_D': c_d,
         'c_b': ballistic_coefficient,
+        'ReferenceArea [m^2]': step_reference_area(alpha, a_ref, a_ref_axial),
         'L/D': lift_to_drag_ratio,
         'v_x': v_x,
         'v_y': v_y,
@@ -270,7 +299,9 @@ def ballistic_traj(df_scenarios,scenario_name, delta_t):
     if not nose_radius > 0 or not surface_emissivity > 0:
         print(colors.BOLD + colors.RED + f"Scenario '{scenario_name}': R_n = {nose_radius}, "
               f"eta_sf = {surface_emissivity} - the heat fluxes stay inf or zero." + colors.END)
-    args = ballistic_coefficient, nose_radius, velocity, flight_path_angle, surface_emissivity, lift_to_drag_ratio, altitude, date, lat, lon, delta_t, mass, aero_active
+    # A_ref normalises the C_D table (fixed), the projected area at alpha sets the NOx air mass
+    a_ref, a_ref_axial = scenario_reference_areas(scenario, scenario_name, aero_active)
+    args = ballistic_coefficient, nose_radius, velocity, flight_path_angle, surface_emissivity, lift_to_drag_ratio, altitude, date, lat, lon, delta_t, mass, aero_active, a_ref, a_ref_axial
     # Initialize results list and parameters for the first step
     results = [initialize_parameters(args)]
     i = 1
@@ -299,7 +330,7 @@ def ballistic_traj(df_scenarios,scenario_name, delta_t):
             # Angle of attack schedule: C_D, L/D and c_b = mass / (C_D * A) per altitude or time
             t_now = (i - 1) * delta_t + (delta_t - t_remaining)
             alpha, c_d, lift_to_drag_ratio, ballistic_coefficient = aero_state(
-                t_now, alt_m, mass, ballistic_coefficient, lift_to_drag_ratio, aero_active)
+                t_now, alt_m, mass, ballistic_coefficient, lift_to_drag_ratio, aero_active, a_ref)
 
             density, temperature, pressure, soundspeed, total_number_density, df_atm_massfractions, df_atm_molarfractions, kappa_mix, r_mix = \
                 calculate_atmosphere_traj(date, lat, lon, alt_m)
@@ -391,6 +422,7 @@ def ballistic_traj(df_scenarios,scenario_name, delta_t):
             'AoA [deg]': last['alpha'],
             'C_D': last['c_d'],
             'c_b': last['c_b'],
+            'ReferenceArea [m^2]': step_reference_area(last['alpha'], a_ref, a_ref_axial),
             'L/D': last['ldr'],
             'v_x': v_x,
             'v_y': v_y,
@@ -843,7 +875,7 @@ def pydrama(df_scenarios,scenario_name):
 
         print(colors.BOLD + colors.GREEN + "PyDrama: Scenario Model Update completed successfully." + colors.END)
     except Exception as e:
-        handle_error(e, "pydrama", "Error while updating the model data ULPM file.")
+        handle_error(e, "pydrama", "Error while updating the generic model data file.")
         # Without raise, SARA would silently start with whatever objects.xml is left in the scenario folder, e.g. the previous scenario's model; main.py catches per-scenario exceptions and moves on
         raise
     

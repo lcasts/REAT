@@ -13,6 +13,68 @@ import xml.etree.ElementTree as ET   # objects.xml (DRAMA) / result XML (DEBRISK
 from datetime import datetime, timedelta
 from tqdm import tqdm
 
+#region: Angle of Attack Aerodynamics
+# Cache so the workbook is read once per run instead of once per integration step
+_aero_tables = None
+
+
+def get_aero_tables(force_reload=False):
+    """Angle of attack schedule and aerodynamic coefficients from the aero workbook.
+
+    Returns a dict with
+        schedule_x      breakpoints in the basis chosen by aero_schedule_basis
+                        ('altitude' -> km, 'time' -> s)
+        schedule_alpha  angle of attack [deg] at each breakpoint
+        alpha           angle of attack [deg] of the coefficient table
+        c_d             drag coefficient at each alpha
+        ldr             lift-to-drag ratio at each alpha
+    """
+    global _aero_tables
+    if _aero_tables is not None and not force_reload:
+        return _aero_tables
+
+    path = os.path.join(input_data_folder_path, file_name_aero)
+    if not os.path.exists(path):
+        raise FileNotFoundError(
+            f"Aero workbook '{path}' not found. It holds the angle of attack schedule and "
+            f"the C_D / L/D tables; set aero_schedule_basis = None to run without it.")
+
+    schedule = pd.read_excel(path, sheet_name=sheet_name_aero_schedule)
+    coefficients = pd.read_excel(path, sheet_name=sheet_name_aero_coefficients)
+    schedule.columns = [str(c).strip() for c in schedule.columns]
+    coefficients.columns = [str(c).strip() for c in coefficients.columns]
+
+    # The basis column is named after the basis, so a workbook cannot be used with the
+    # wrong aero_schedule_basis by accident
+    basis_column = 'time_s' if aero_schedule_basis == 'time' else 'altitude_km'
+    for frame, column, sheet in ((schedule, basis_column, sheet_name_aero_schedule),
+                                 (schedule, 'alpha_deg', sheet_name_aero_schedule),
+                                 (coefficients, 'alpha_deg', sheet_name_aero_coefficients),
+                                 (coefficients, 'c_d', sheet_name_aero_coefficients),
+                                 (coefficients, 'ldr', sheet_name_aero_coefficients)):
+        if column not in frame.columns:
+            raise ValueError(f"Sheet '{sheet}' of '{path}' has no column '{column}'. "
+                             f"Found: {list(frame.columns)}")
+
+    schedule = schedule.dropna(subset=[basis_column, 'alpha_deg'])
+    coefficients = coefficients.dropna(subset=['alpha_deg', 'c_d', 'ldr']).sort_values('alpha_deg')
+
+    if schedule.empty or coefficients.empty:
+        raise ValueError(f"The aero workbook '{path}' carries no usable rows.")
+    if (coefficients['c_d'] <= 0).any():
+        raise ValueError(f"'{sheet_name_aero_coefficients}' contains C_D <= 0; "
+                         f"c_b = mass / (C_D * A) would diverge.")
+
+    _aero_tables = {
+        'schedule_x': schedule[basis_column].to_numpy(dtype=float),
+        'schedule_alpha': schedule['alpha_deg'].to_numpy(dtype=float),
+        'alpha': coefficients['alpha_deg'].to_numpy(dtype=float),
+        'c_d': coefficients['c_d'].to_numpy(dtype=float),
+        'ldr': coefficients['ldr'].to_numpy(dtype=float),
+    }
+    return _aero_tables
+#endregion
+
 #region: Input Data Generation
 # Import all required data based on user input and config
 def get_input_data():
@@ -327,9 +389,9 @@ SCARAB_MATERIAL_NAME_MAP = {
 
 # Import Scarab Files
 def scarab_input(df_scenarios, scenario_name):
-    # locate simulation data in <input_data_folder_path>/<reentry_vehicle> (SCARAB folder copied in as-is)
+    # locate simulation data in <scarab_output_folder_path>/<reentry_vehicle> (SCARAB result folder as-is)
     reentry_vehicle = df_scenarios.loc[scenario_name, 'reentry_vehicle']
-    scenario_folder_path = os.path.join(input_data_folder_path, reentry_vehicle)
+    scenario_folder_path = os.path.join(scarab_output_folder_path, reentry_vehicle)
 
     if not os.path.exists(scenario_folder_path):
         # Without the return the following read_csv() raises a FileNotFoundError.
@@ -912,17 +974,19 @@ def compress_trajaerodata_dataframe(df_trajaerodata, compress_method, compress_i
         # Define fields for grouping
         grouping_fields = ['ObjectID', bin_field, 'LatBin', 'LonBin']
 
-        # Aggregation rules; every state value has to come from the SAME sample of the bin
+        # Aggregation rules; d_m is summed over the bin, so the flight state that sets the air
+        # mass (altitude -> density, velocity, position, date) is averaged over the same bin.
+        # 'Time [s]' stays the bin end, the emission routines derive the bin duration from it
         agg_dict = {
             'Time [s]': 'last',
-            'Altitude [km]': 'last',
-            'Lat [deg]': 'last',
-            'Lon [deg]': 'last',
-            'Velocity [km/s]': 'last',
+            'Altitude [km]': 'mean',
+            'Lat [deg]': 'mean',
+            'Lon [deg]': 'mean',
+            'Velocity [km/s]': 'mean',
             'Downrange [km]': 'last',
             'Mass [kg]': 'last',
             'Temp [K]': 'last',
-            'Datetime': 'last',
+            'Datetime': 'mean',
             'ObjectName': 'last',
             'Part': 'last',
             'Material': 'last',
@@ -979,6 +1043,7 @@ def compress_trajaerodata_dataframe(df_trajaerodata, compress_method, compress_i
 def compress_trajaerodata_scarab_dataframe(df_trajaerodata, compress_method, compress_interval, compress_lat, compress_lon, scenario_name):
 
     df_copy = df_trajaerodata.copy()
+    df_copy['Datetime'] = pd.to_datetime(df_copy['Datetime'])
 
     print('df_copy:\n', df_copy)
     result_list = []
@@ -1015,17 +1080,19 @@ def compress_trajaerodata_scarab_dataframe(df_trajaerodata, compress_method, com
         # Define fields for grouping
         grouping_fields = ['FragmentID', bin_field, 'LatBin', 'LonBin']
 
-        # Define aggregation rules
+        # Aggregation rules; d_m is summed over the bin, so the flight state that sets the air
+        # mass (altitude -> density, velocity, position, date) is averaged over the same bin.
+        # 'Time [s]' stays the bin end, the emission routines derive the bin duration from it
         agg_dict = {
             'Time [s]': 'last',
-            'Altitude [km]': 'last',
-            'Lat [deg]': 'last',
-            'Lon [deg]': 'last',
-            'Velocity [km/s]': 'last',
+            'Altitude [km]': 'mean',
+            'Lat [deg]': 'mean',
+            'Lon [deg]': 'mean',
+            'Velocity [km/s]': 'mean',
             'Downrange [km]': 'last',
             'Total Fragment Mass [kg]': 'last',
             'Temp [K]': 'last',
-            'Datetime': 'last',
+            'Datetime': 'mean',
             'd_m [kg]': 'sum',
             'ReferenceArea [m^2]': 'last',
             'scenario': 'last',
@@ -1284,22 +1351,87 @@ def filter_emission_data(df, compress_method, compress_interval, compress_lat, c
     
     return df_grouped
 
+def projected_reference_area(alpha_deg, a_side, a_axial=0.0):
+    """Reference area a body presents to the flow at angle of attack alpha.
+
+    Models the vehicle as a cylinder: at alpha = 90 deg the flow sees the full
+    broadside area a_side, at alpha = 0 deg only the axial (nose-on) area
+    a_axial. The absolute values make the result independent of the sign
+    convention and of the 180 deg wrap in a measured attitude angle.
+    """
+    alpha = np.radians(np.asarray(alpha_deg, dtype=float))
+    return np.abs(np.sin(alpha)) * a_side + np.abs(np.cos(alpha)) * a_axial
+
+
+# Every column a ballistic trajectory (internal generator or external CSV) can carry.
+# Anything numeric outside this list is a species column written by the NOx calculation,
+# so neither the presence nor the position of 'T_rad_equil_comb' decides the split.
+TRAJECTORY_COLUMNS_BAL = frozenset({
+    # Time and position
+    'Time [s]', 'MET [s]', 'date', 'Datetime', 'scenario', 'reentry_vehicle',
+    'Altitude [m]', 'Altitude [km]', 'Lat [deg]', 'Lon [deg]',
+    'Downrange [m]', 'Downrange [km]',
+    # Velocities and attitude
+    'Velocity [m/s]', 'Velocity [km/s]', 'Velocity [k/s]', 'v_x', 'v_y',
+    'AoA [deg]', 'C_D', 'c_b', 'L/D', 'FPA (rad)', 'FPA (deg)',
+    # Accelerations and delta-v budget
+    'a_drag', 'n', 'dv_drag', 'dv_drag_x', 'dv_drag_y', 'dv_grav_y', 'dv_orb_y',
+    'dv_lift_x', 'dv_lift_y', 'dv_net_x', 'dv_net_y',
+    # Atmosphere and aerothermodynamics
+    'rho', 'h', 'p_amb', 'Ma', 'Temp [K]',
+    'p_dyn (Pa)', 'p_dyn (hPa)', 'p_tot (Pa)', 'p_tot (hPa)',
+    'q_conv', 'q_int_conv', 'q_rad', 'q_int_rad', 'q_combined', 'q_int_combined',
+    'T_rad_equil_comb', COL_T_AB,
+    # Mass loss and aggregates
+    'd_m [kg]', 'Mass [kg]', 'ReferenceArea [m^2]',
+    'total_sum_species', 'total_sum_emissions',
+})
+
+
+def species_columns_bal(df):
+    """Species columns of a ballistic emission result: everything that is not trajectory data.
+
+    The emission loops build their species frame through an empty DataFrame, so the
+    columns can arrive as object dtype even though they hold numbers. A column
+    therefore counts as a species when every value it holds converts to a number,
+    which still keeps stray text columns out of the sum.
+    """
+    species = []
+    for col in df.columns:
+        if col in TRAJECTORY_COLUMNS_BAL:
+            continue
+        if pd.to_numeric(df[col], errors="coerce").notna().sum() == df[col].notna().sum():
+            species.append(col)
+    return species
+
+
 def filter_emission_data_bal(df, compress_method, compress_interval, compress_lat, compress_lon):
     required_columns = ['Time [s]', 'date', 'Altitude [km]', 'Lat [deg]', 'Lon [deg]', 'Velocity [m/s]']
-    species_columns = df.columns[df.columns.get_loc('T_rad_equil_comb') + 1:].tolist()
-    
+    species_columns = species_columns_bal(df)
+
     # Check if all required columns are in the DataFrame
     if not all(col in df.columns for col in required_columns):
-        raise ValueError("Input DataFrame is missing required columns.")
+        missing = [col for col in required_columns if col not in df.columns]
+        raise ValueError(f"Input DataFrame is missing required columns: {missing}")
+
+    if not species_columns:
+        print(colors.BOLD + colors.RED
+              + "No species columns in the emission result - nothing to aggregate." + colors.END)
     
     # Create a copy of the DataFrame
     df_copy = df.copy()
-    
+
+    # Species columns can carry object dtype from the emission loops; sum() would
+    # then concatenate instead of add
+    for col in species_columns:
+        df_copy[col] = pd.to_numeric(df_copy[col], errors="coerce")
+
     # Round values based on the specified compression intervals
     if compress_method == "time":
         df_copy['Time [s]'] = (df_copy['Time [s]'] // compress_interval) * compress_interval
     elif compress_method == "height":
-        df_copy['Altitude [km]'] = (df_copy['Altitude [km]'] // compress_interval*1000) * compress_interval*1000
+        # compress_interval is in km for the height method, like in filter_emission_data()
+        df_copy['Altitude [km]'] = (df_copy['Altitude [km]'] // compress_interval) * compress_interval
     else:
         raise ValueError("Invalid compress_method. Use 'time' or 'height'.")
     
@@ -1328,15 +1460,12 @@ def filter_emission_data_bal(df, compress_method, compress_interval, compress_la
     return df_filtered
 
 def smart_round(number):
-    # Convert the number to a string to check for 'e' (scientific notation)
-    if 'e' in f"{number}":
-        # Separate the coefficient and the exponent
-        coefficient, exponent = f"{number:.4e}".split('e')
-        # Convert back to float with adjusted rounding
-        return float(f"{float(coefficient):.4f}e{int(exponent)}")
-    else:
-        # For normal floats, round to 5 decimal places
-        return round(number, 5)
+    # Round to 5 significant digits, the precision NASA CEA prints mass fractions with
+    # ('1.3443-8', '7.5178-1'), so CEA output and ambient air are compared on equal terms
+    number = float(number)
+    if not np.isfinite(number) or number == 0.0:
+        return number
+    return float(f"{number:.4e}")
 
 # Calculate Athmosphere Data for Afterburning
 def calculate_atmosphere_data(row):

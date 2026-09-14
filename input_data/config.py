@@ -10,11 +10,11 @@ import numpy as np
 #### Choose which Scenarios to process ####
 #-------------------------------------
 all_scenarios = True                        # When False only the user_defined_scenarios will be processed
-user_defined_scenarios = ["2025-082_Falcon_9-402_Stage_2"]  # Based on the scenario name
+user_defined_scenarios = ["Example_Falcon_9_pyDRAMA"]  # Based on the scenario name
 
 #### Selection of Trajectory Data ####
 #-------------------------------------
-traj_inp_data = 'PyDrama'                   # OwnBallistic, Ballistic, OwnDrama, PyDrama, OwnScarab, OwnDebrisk
+traj_inp_data = 'PyDrama'                # OwnBallistic, Ballistic, OwnDrama, PyDrama, OwnScarab, OwnDebrisk
 
 #### Component Materials ####
 #-------------------------------------
@@ -24,7 +24,7 @@ material_source = 'name'                    # 'name': from the component name be
 #-------------------------------------
 R = 287.058                 # J/(kg·K)      for p = ρ⋅R⋅T
 kappa = 1.4                 # Heat capacity
-delta_t = 0.1               # Timestep [s], trajectory integration and emission mass flow
+delta_t = 1.0               # Timestep [s], trajectory integration and emission mass flow
 avogadro_number = 6.02214076e23  # Molecules per mole
 
 # Universal constants for the atmospheric state from the NRLMSIS composition
@@ -55,7 +55,7 @@ file_name_ext_trajectory = 'input_data/example_trajectory_ballistic.csv'   # onl
 
 #### Ballistic Trajectory Simulation Parameters ####
 #-------------------------------------
-t_max = 750                 # Maximum simulation time [s], stops a runaway integration
+t_max = 1750                # Maximum simulation time [s], stops a runaway integration
 h_max = 125000              # Upper altitude bound [m], the integration stops above it
 #t_span = (0, t_max)        # unused
 #numeric_method = 'RK45'    # unused, would need the integrator on scipy.solve_ivp
@@ -63,14 +63,15 @@ h_max = 125000              # Upper altitude bound [m], the integration stops ab
 
 #### Angle of Attack Dependent Aerodynamics ####
 #-------------------------------------
-aero_schedule_basis = None      # None = constant c_b/ldr from the scenario; 'altitude' [km] or 'time' [s]
+aero_schedule_basis = 'altitude'  # None = constant c_b/ldr from the scenario; 'altitude' [km] or 'time' [s]
 aero_interpolation = 'linear'   # 'linear' between the breakpoints, or 'step' to hold each value
-aero_reference_area = 400.0     # Reference area [m^2] of the aero table, for c_b = mass / (C_D * A)
-aero_schedule_x = [120, 70, 55, 40, 20, 0]              # Breakpoints of the schedule in the chosen basis
-aero_schedule_alpha = [60, 60, 60, 55, 30, 5]           # Angle of attack [deg] at each breakpoint
-aero_alpha = [0, 10, 20, 30, 45, 60, 90]                # Angle of attack [deg] of the aerodynamic table
-aero_cd = [0.90, 0.92, 1.00, 1.15, 1.40, 1.65, 1.85]    # Drag coefficient at each aero_alpha
-aero_ldr = [0.00, 0.20, 0.38, 0.50, 0.45, 0.25, 0.00]   # Lift-to-drag ratio at each aero_alpha
+# The schedule alpha(x) and the tables C_D(alpha), L/D(alpha) live in their own
+# workbook; data_processing.get_aero_tables() reads and caches them. The C_D table is
+# normalised with the scenario's A_ref (c_b = mass / (C_D * A_ref)); the NOx air mass uses
+# the projected area A_ref*|sin(alpha)| + A_ref_axial*|cos(alpha)| of each step.
+file_name_aero = 'aero_data.xlsx'        # Workbook with the angle of attack aerodynamics
+sheet_name_aero_schedule = 'schedule'        # Columns: altitude_km (or time_s) and alpha_deg
+sheet_name_aero_coefficients = 'coefficients'  # Columns: alpha_deg, c_d and ldr
 
 #### Constants of the Ballistic Model ####
 #-------------------------------------
@@ -88,8 +89,7 @@ sigma_bal = 5.670374E-08    # W/(m^2 K^4)
 #### Break-up ####
 #-------------------------------------
 fragmentation_altitude = 80000          # [m] break-up altitude for GM1/GM2, written into <breakUpTriggers> of objects.xml
-fragmentation_altitude_f9 = 80000       # 78600 [m] same for F9_Tumbling/F9_Fixed, from the observed Falcon 9-435 fragmentation
-fragmentation_altitude_ariane = 80000   # [m] same for Ariane_Tumbling/Ariane_Fixed
+fragmentation_altitude_f9 = 78600       # 78600 [m] same for F9_Tumbling/F9_Fixed, from the observed Falcon 9-435 fragmentation
 
 #### Material Names of the DRAMA Model ####
 #-------------------------------------
@@ -147,7 +147,7 @@ use_cantera = False                 # Material combustion via Cantera instead of
 calculate_nox = True                # Air shock NOx
 nox_method = "nasa_cea"             # nasa_cea, cantera
 calculate_black_carbon = False      # for now not implemented
-x_ab = 1.2                            # Emission calculation diameter factor for interaction
+x_ab = 4                            # Emission calculation diameter factor for interaction
 temp_factor = "roberts_lam"         # roberts_lam, roberts_turb, eckert_lam, eckert_turb, mix_temperature, isentropic, e.g. 0.5
 Pr_lam = 0.7                        # Prandtl laminar, for the recovery temperature
 Pr_turb = 0.9                       # Prandtl turbulent, for the recovery temperature
@@ -158,7 +158,11 @@ trace = "1.e-15"                        # CEA trace limit
 problem_material_combustion = "tp"      # tp, hp
 material_quench_temperature = None      # [K] second tp run at this temperature feeds the balance; None = off, e.g. 1500.0
 problem_hotgas_calculation = "shock"       # tp/hp: equilibrium at the perfect-gas post-shock state; shock: CEA does the jump itself
-# Oxidiser (air) temperature t_air: "cea_stagnation" (physical post-shock equilibrium, dissociation) or "perfect_gas_stagnation" (calorically perfect, much higher); with "tp" this only affects the CEA retry and 7200 K substitutions, not species distribution
+# Temperature assigned to the oxidiser (air) reactants, t_air:
+#   "cea_stagnation"          CEA equilibrium static temperature behind the shock, isentropically brought to rest - the physically meaningful value (dissociation)
+#   "perfect_gas_stagnation"  t_atm * (1 + (kappa-1)/2 * mach_1^2), calorically perfect gas. Far higher at re-entry Mach numbers (M1=25: ~31500 K vs ~6500 K).
+# With problem_material_combustion = "tp" this does not change the species distribution; it acts
+# on the CEA retry (t_ab = max(t_mat, t_air)) and on the 7200 K species substitutions.
 hotgas_air_temperature = "cea_stagnation"
 
 #### Cantera Config ####
@@ -174,7 +178,10 @@ shock_state = "inc_eq"              # Station used for the balance: inc_eq, inc_
 shock_ions = False                  # Include ionised species (e-, NO+, N+, O+, ...)
 shock_debug = False                 # CEA flag 'deb': write every iteration to the .out file
 shock_mach_min = 1.05               # Below this free-stream Mach number CEA computes no shock solution
-# Free-stream state handed to CEA's shock problem: "u1" (velocity, CEA derives speed of sound from the local NRLMSIS mixture) or "mach1" (Mach number from calculate_atmosphere_data())
+# How the free-stream state is handed to CEA's shock problem:
+#   "u1"     velocity [m/s] - CEA derives the speed of sound from the reactant mixture
+#            itself, so the local NRLMSIS composition is used, no external kappa/R needed
+#   "mach1"  Mach number from calculate_atmosphere_data()'s speed of sound
 shock_input = "u1"
 #endregion
 
@@ -182,6 +189,7 @@ shock_input = "u1"
 #### Folders ####
 #-------------------------------------
 input_data_folder_path = 'input_data/'
+scarab_output_folder_path = '../SCARAB_path/'   # SCARAB result folders, one per scenario named like 'reentry_vehicle'
 output_data_folder_path_trajectory = 'output_data/trajectory'
 output_data_folder_path_nasa_cea = 'output_data/emissions'
 output_data_folder_path_excel = 'output_data/data_raw/excel/'

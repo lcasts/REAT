@@ -168,7 +168,7 @@
         <temperature>300.0</temperature>
     </object>
     <object>
-        <name>Nozzle - CC</name>
+        <name>Nozzle - CCSiC</name>
         <uniqueID>234ddda3-8f1f-435c-93bb-af537075fbf1</uniqueID>
         <primitive>
             <cone>
@@ -402,7 +402,7 @@
         <temperature>300.0</temperature>
     </object>
     <object>
-        <name>LVA - CFRP_AA7075</name>
+        <name>LVA - LVA</name>
         <uniqueID>e9d99545-37ad-460e-9ecf-171864df323f</uniqueID>
         <primitive>
             <cone>

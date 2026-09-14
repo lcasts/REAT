@@ -15,7 +15,7 @@
             <Green>128</Green>
             <Blue>128</Blue>
         </color>
-        <mass>1019.8300283478721</mass>
+        <mass>900.0</mass>
         <material>drama-AA7075</material>
         <relativePosition>
             <cartX>4.0</cartX>
@@ -47,7 +47,7 @@
             <Green>128</Green>
             <Blue>128</Blue>
         </color>
-        <mass>1232.054361496356</mass>
+        <mass>1087.287974</mass>
         <material>drama-AA7075</material>
         <relativePosition>
             <cartX>2.7</cartX>
@@ -79,7 +79,7 @@
             <Green>128</Green>
             <Blue>128</Blue>
         </color>
-        <mass>467.6623523034497</mass>
+        <mass>412.7120259</mass>
         <material>drama-AA7075</material>
         <relativePosition>
             <cartX>6.5</cartX>
@@ -112,7 +112,7 @@
             <Green>128</Green>
             <Blue>128</Blue>
         </color>
-        <mass>339.94334278262403</mass>
+        <mass>300.0</mass>
         <material>drama-AA7075</material>
         <relativePosition>
             <cartX>7.6</cartX>
@@ -146,7 +146,7 @@
             <Green>128</Green>
             <Blue>128</Blue>
         </color>
-        <mass>203.96600566957443</mass>
+        <mass>510.0</mass>
         <material>drama-Inconel718</material>
         <relativePosition>
             <cartX>9.125</cartX>
@@ -166,7 +166,7 @@
         <temperature>300.0</temperature>
     </object>
     <object>
-        <name>VINCInozzle - CC</name>
+        <name>VINCInozzle - CCSiC</name>
         <uniqueID>234ddda3-8f1f-435c-93bb-af537075fbf1</uniqueID>
         <primitive>
             <cone>
@@ -179,7 +179,7 @@
             <Green>128</Green>
             <Blue>128</Blue>
         </color>
-        <mass>475.92067989567363</mass>
+        <mass>90.0</mass>
         <material>drama-Carbon-Carbon</material>
         <relativePosition>
             <cartX>10.7</cartX>
@@ -213,7 +213,7 @@
             <Green>128</Green>
             <Blue>128</Blue>
         </color>
-        <mass>339.94334278262403</mass>
+        <mass>300.0</mass>
         <material>drama-Copper</material>
         <relativePosition>
             <cartX>5.0</cartX>
@@ -247,7 +247,7 @@
             <Green>128</Green>
             <Blue>128</Blue>
         </color>
-        <mass>339.94334278262403</mass>
+        <mass>300.0</mass>
         <material>drama-Copper</material>
         <relativePosition>
             <cartX>5.0</cartX>
@@ -267,7 +267,7 @@
         <temperature>300.0</temperature>
     </object>
     <object>
-        <name>Fluidics - A316</name>
+        <name>Fluidics - A316L</name>
         <uniqueID>824e1ae0-79b2-4d19-8db1-b853075120c9</uniqueID>
         <primitive>
             <ring>
@@ -281,7 +281,7 @@
             <Green>128</Green>
             <Blue>128</Blue>
         </color>
-        <mass>475.92067989567363</mass>
+        <mass>420.0</mass>
         <material>drama-A316</material>
         <relativePosition>
             <cartX>8.7</cartX>
@@ -313,7 +313,7 @@
             <Green>128</Green>
             <Blue>128</Blue>
         </color>
-        <mass>101.98300283478721</mass>
+        <mass>90.0</mass>
         <material>drama-HC-CFRP-8ply</material>
         <relativePosition>
             <cartX>8.4</cartX>
@@ -345,7 +345,7 @@
             <Green>128</Green>
             <Blue>128</Blue>
         </color>
-        <mass>101.98300283478721</mass>
+        <mass>90.0</mass>
         <material>drama-HC-CFRP-8ply</material>
         <relativePosition>
             <cartX>8.4</cartX>
@@ -379,7 +379,7 @@
             <Green>128</Green>
             <Blue>128</Blue>
         </color>
-        <mass>339.94334278262403</mass>
+        <mass>300.0</mass>
         <material>drama-TiAl6v4</material>
         <relativePosition>
             <cartX>6.0</cartX>
@@ -399,7 +399,7 @@
         <temperature>300.0</temperature>
     </object>
     <object>
-        <name>LVA - CFRP_AA7075</name>
+        <name>LVA - LVA</name>
         <uniqueID>6af281b8-7642-49f3-a4e4-5ff69aa720c4</uniqueID>
         <primitive>
             <cone>
@@ -412,7 +412,7 @@
             <Green>128</Green>
             <Blue>128</Blue>
         </color>
-        <mass>560.9065155913297</mass>
+        <mass>500.0</mass>
         <material>drama-AA7075</material>
         <relativePosition>
             <cartX>0.45</cartX>
