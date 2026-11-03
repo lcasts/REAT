@@ -22,12 +22,10 @@ warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
 # Suppress FutureWarnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
-# Path to the NASA CEA executable; normpath because Windows rejects forward slashes in a
-# relative program path (WinError 2)
+# NASA CEA executable, normpath because Windows rejects forward slashes in a relative program path
 nasa_cea_executable = os.path.normpath(nasa_cea_folder_path + nasa_cea_exe)
 
-# Cantera only searches its own data folder and the working directory, cea_species.yaml is
-# in input_data/
+# Cantera only searches its data folder and the working directory, so add input_data/
 ct.add_directory(input_data_folder_path)
 
 #region: Additional subfunctions to process the main functions
@@ -41,8 +39,7 @@ def resolve_cantera_species_name(gas, name):
             return variant
     return None
 
-# Mole-fraction dict for gas.TPX, restricted to the species the loaded phase defines and
-# renormalised over them
+# Mole-fraction dict for gas.TPX, restricted to the species of the phase and renormalised
 def build_cantera_atm_composition(gas, df_atm_molarfractions):
     candidate_species = {
         'N2': df_atm_molarfractions.get('N2', 0),
@@ -101,7 +98,7 @@ def row_timesteps(df):
 def create_inp_file(filename, df=None, *args, problem_override=None):
     t_atm, p_atm, t_mat, t_stag, p_stag, t_air, t_ab, p_ab, rof_ab, df_material_massfractions, df_air_massfractions = args
 
-    # problem_override forces the problem type; the quench run always needs 'tp'
+    # problem_override forces the problem type; the wake run always needs 'tp'
     problem = problem_override or problem_material_combustion
 
     line = "problem o/f={},\n".format(rof_ab)
@@ -128,9 +125,7 @@ def create_inp_file(filename, df=None, *args, problem_override=None):
             if k.lstrip('*') not in ["He", "Ar"]
         }
 
-        # Rank by mass per kg of material: material_data holds percent (sum 100), the air mass
-        # fractions (sum 1) times rof_ab give kg of air per kg of material. Kept as
-        # (side, name, mass) so a species on both sides ('O', 'N', 'H') is not overwritten
+        # Rank reactants by mass per kg of material, kept as (side, name, mass) so species on both sides survive
         ranked = ([('fuel', k, v / 100.0) for k, v in material_species.items()] +
                   [('oxid', k, v * rof_ab) for k, v in air_species.items()])
         kept = sorted(ranked, key=lambda x: x[2], reverse=True)[:24]
@@ -146,17 +141,18 @@ def create_inp_file(filename, df=None, *args, problem_override=None):
     # Include Fuel and Air Species
     line += "react \n"
     for fuel, mass_fraction in material_species.items():
-        if fuel == "AL(cr)" and t_mat > 933.61:
+        # Phase bounds from NASA_CEA/thermo.inp; '>=' on the lower bound so exact transition temperatures are covered
+        if fuel == "AL(cr)" and t_mat >= 933.61:
             fuel = "AL(L)"
-        if fuel == "Zn(cr)" and t_mat > 692.73:
+        if fuel == "Zn(cr)" and t_mat >= 692.73:
             fuel = "Zn(L)"
-        elif fuel == "Li(cr)" and t_mat > 453.69:
+        elif fuel == "Li(cr)" and t_mat >= 453.69:
             fuel = "Li(L)"
-        elif fuel == "Ag(cr)" and t_mat > 1235.08:
+        elif fuel == "Ag(cr)" and t_mat >= 1235.08:
             fuel = "Ag(L)"
-        elif fuel == "Sn(cr)" and t_mat > 505.12:
+        elif fuel == "Sn(cr)" and t_mat >= 505.118:
             fuel = "Sn(L)"
-        elif fuel == "Mg(cr)" and t_mat > 923.00:
+        elif fuel == "Mg(cr)" and t_mat >= 923.00:
             fuel = "Mg(L)"
         elif fuel == "Mn(a)" and t_mat >= 980.00 and t_mat < 1361.00:
             fuel = "Mn(b)"
@@ -164,40 +160,54 @@ def create_inp_file(filename, df=None, *args, problem_override=None):
             fuel = "Mn(c)"
         elif fuel == "Mn(a)" and t_mat >= 1412.00 and t_mat < 1519.00:
             fuel = "Mn(d)"
-        elif fuel == "Mn(a)" and t_mat > 1519.00:
+        elif fuel == "Mn(a)" and t_mat >= 1519.00:
             fuel = "Mn(L)"
         elif fuel == "Fe(a)" and t_mat >= 1184.00 and t_mat < 1665.00:
             fuel = "Fe(c)"
         elif fuel == "Fe(a)" and t_mat >= 1665.00 and t_mat < 1809.00:
             fuel = "Fe(d)"
-        elif fuel == "Fe(a)" and t_mat > 1809.00:
+        elif fuel == "Fe(a)" and t_mat >= 1809.00:
             fuel = "Fe(L)"
-        elif fuel == "Co(a)" and t_mat >= 700.1007 and t_mat < 1768.000:
+        elif fuel == "Co(a)" and t_mat >= 700.10 and t_mat < 1768.00:
             fuel = "Co(b)"
-        elif fuel == "Co(a)" and t_mat > 1768.000:
+        elif fuel == "Co(a)" and t_mat >= 1768.00:
             fuel = "Co(L)"
-        elif fuel == "Cr(cr)" and t_mat > 2130.00:
+        elif fuel == "Cr(cr)" and t_mat >= 2130.00:
             fuel = "Cr(L)"
-        elif fuel == "Cu(cr)" and t_mat > 1358.0007:
+        elif fuel == "Cu(cr)" and t_mat >= 1358.00:
             fuel = "Cu(L)"
-        elif fuel == "P(cr)" and t_mat > 317.30:
+        elif fuel == "P(cr)" and t_mat >= 317.30:
             fuel = "P(L)"
-        elif fuel == "Pb(cr)" and t_mat > 600.65:
+        elif fuel == "Pb(cr)" and t_mat >= 600.65:
             fuel = "Pb(L)"
-        elif fuel == "S(a)" and t_mat >= 368.3007 and t_mat < 388.3607:
+        elif fuel == "S(a)" and t_mat >= 368.30 and t_mat < 388.36:
             fuel = "S(b)"
-        elif fuel == "S(a)" and t_mat > 388.3607:
+        elif fuel == "S(a)" and t_mat >= 388.36:
             fuel = "S(L)"
-        elif fuel == "Si(cr)" and t_mat > 1690.00:
+        elif fuel == "Si(cr)" and t_mat >= 1690.00:
             fuel = "Si(L)"
-        elif fuel == "Ti(a)" and t_mat >= 1156.000 and t_mat < 1944.000:
+        elif fuel == "Ti(a)" and t_mat >= 1156.00 and t_mat < 1944.00:
             fuel = "Ti(b)"
-        elif fuel == "Ti(a)" and t_mat > 1944.000:
+        elif fuel == "Ti(a)" and t_mat >= 1944.00:
             fuel = "Ti(L)"
-        elif fuel == "Zr(a)" and t_mat > 1135.0007 and t_mat < 2125.0007:
+        elif fuel == "Zr(a)" and t_mat >= 1135.00 and t_mat < 2125.00:
             fuel = "Zr(b)"
-        elif fuel == "Zr(a)" and t_mat > 2125.0007:
+        elif fuel == "Zr(a)" and t_mat >= 2125.00:
             fuel = "Zr(L)"
+        elif fuel == "Ni(cr)" and t_mat >= 1728.00:
+            fuel = "Ni(L)"
+        elif fuel == "B(b)" and t_mat >= 2350.00:
+            fuel = "B(L)"
+        elif fuel == "V(cr)" and t_mat >= 2190.00:
+            fuel = "V(L)"
+        elif fuel == "Nb(cr)" and t_mat >= 2750.00:
+            fuel = "Nb(L)"
+        elif fuel == "Mo(cr)" and t_mat >= 2896.00:
+            fuel = "Mo(L)"
+        elif fuel == "Ta(cr)" and t_mat >= 3258.00:
+            fuel = "Ta(L)"
+        elif fuel == "W(cr)" and t_mat >= 3680.00:
+            fuel = "W(L)"
         line += "  fuel={} wt={} t,k={} \n".format(fuel, mass_fraction, t_mat)
 
     for air, mass_fraction in air_species.items():
@@ -228,9 +238,7 @@ def create_inp_file(filename, df=None, *args, problem_override=None):
     with open(filename + ".inp", "w") as file:
         file.write(inp_string)
 
-# --- NASA CEA shock problem ------------------------------------------------
-# Station -> (calculation basis, block heading) in the .out file; only the heading prefix is
-# matched because CEA2 misspells the frozen one ("CONDITI1ONS")
+# --- NASA CEA shock problem: station -> (basis, heading prefix, CEA2 misspells the frozen one) ---
 SHOCK_BASIS_HEADER = {
     "eq": "EQUILIBRIUM COMPOSITION FOR INCIDENT SHOCKED CONDITI",
     "fz": "FROZEN COMPOSITION FOR INCIDENT SHOCKED CONDITI",
@@ -248,8 +256,12 @@ def cea_float(token):
     t = str(token).strip().replace(" ", "")
     if not t:
         return float("nan")
-    if "*" in t:                      # CEA prints '******' when a field overflows
-        return 1.0
+    if "*" in t:
+        # CEA prints asterisks on overflow; '*****-10' keeps the exponent and means 10^-10
+        m = re.match(r"^\*+([+-]\d+)$", t)
+        if m:
+            return 10.0 ** int(m.group(1))
+        return 1.0                    # no exponent left: '******' in a field of order 1
     try:
         return float(t)
     except ValueError:
@@ -329,8 +341,7 @@ def read_shock_out(filename, station=None):
             continue
         fractions[parts[0]] = cea_float(parts[1])
 
-    # Post-shock Mach number from CEA's velocity and speed of sound, stagnation state from the
-    # isentropic deceleration of station 2 to rest
+    # Post-shock Mach number from CEA, stagnation state from the isentropic deceleration of station 2
     extra = {}
     for key, pattern in [("u2", r"^\s*U[25], M/SEC\s+(.+)$"),
                          ("son_vel", r"^\s*SON VEL,M/SEC\s+(.+)$"),
@@ -358,8 +369,7 @@ def read_shock_out(filename, station=None):
     order = ["p", "t", "mach", "H", "rho", "s"]
     df = pd.DataFrame({"exit": [params.get(k, float("nan")) for k in order]}, index=order)
     out = pd.concat([df, pd.DataFrame({"exit": fractions})])
-    # The stagnation state travels as a DataFrame attribute: it does not fit the six header
-    # rows the downstream df.iloc[6:] relies on
+    # The stagnation state travels as a DataFrame attribute, outside the six header rows
     out.attrs["shock_state"] = {
         "station": station,
         "p": params.get("p", float("nan")),
@@ -375,14 +385,50 @@ def read_shock_out(filename, station=None):
     return out
 
 
-def run_material_quench(filename, t_atm, p_atm, t_mat, t_stag, p_stag, t_air,
-                       p_ab, rof_ab, df_material_massfractions, df_air_massfractions_react):
-    """Re-equilibrate the combustion products at material_quench_temperature (one tp run)."""
-    quench_filename = f"{filename}_quench"
-    create_inp_file(quench_filename, None, t_atm, p_atm, t_mat, t_stag, p_stag, t_air,
-                    material_quench_temperature, p_ab, rof_ab,
-                    df_material_massfractions, df_air_massfractions_react,
-                    problem_override="tp")
+# Hot-gas species CEA only knows up to about 7200 K; same clamp as in create_inp_file()
+WAKE_T_CLAMP_SPECIES = {"NO2", "N2O", "NO3", "N3", "O3", "HNO", "HO2"}
+
+
+def run_material_wake(filename, df_products, df_hotgas, t_ab, p_ab, p_2, p_atm, rof_ab):
+    """Bring the combustion products (at t_ab) to material_wake_temperature in one tp run and return (df_wake, rof_ei)."""
+    wake_pressures = {"p_stag": p_ab, "p_2": p_2, "p_atm": p_atm}
+    if material_wake_pressure not in wake_pressures:
+        raise ValueError(f"material_wake_pressure must be one of {list(wake_pressures)}, "
+                         f"got {material_wake_pressure!r}")
+    p_wake = wake_pressures[material_wake_pressure]
+
+    def species_weights(series, factor):
+        s = pd.to_numeric(series, errors="coerce").fillna(0.0)
+        s.index = s.index.astype(str).str.lstrip("*")
+        s = s[s > 0].groupby(level=0).sum()
+        return s, s * factor
+
+    products, products_mass = species_weights(df_products.iloc[6:, 0], 1.0)
+    reactants = [("name" if not hotgas_wake else "fuel", sp, w, m)
+                 for (sp, w), m in zip(products.items(), products_mass)]
+    if hotgas_wake:
+        hotgas, hotgas_mass = species_weights(df_hotgas.iloc[0], wake_rof)
+        reactants += [("oxid", sp, w, m) for (sp, w), m in zip(hotgas.items(), hotgas_mass)]
+
+    # CEA takes at most 24 reactants, so keep the largest masses
+    reactants = sorted(reactants, key=lambda r: r[3], reverse=True)[:24]
+    if hotgas_wake and not any(r[0] == "oxid" for r in reactants):
+        raise ValueError("no hot-gas species left among the 24 wake reactants")
+
+    line = f"problem o/f={wake_rof},\n" if hotgas_wake else "problem\n"
+    line += f"  tp  t,k={material_wake_temperature} p,bar={p_wake} \n"
+    line += "react \n"
+    for kind, sp, w, _ in reactants:
+        t_react = 7199 if (sp in WAKE_T_CLAMP_SPECIES and t_ab >= 7200) else t_ab
+        line += f"  {kind}={sp} wt={w} t,k={t_react} \n"
+    line += "output \n"
+    line += f"  siunits massf trace={trace} \n"
+    line += "  plot p t mach H rho s \n"
+    line += "end \n"
+
+    wake_filename = f"{filename}_wake"
+    with open(wake_filename + ".inp", "w") as file:
+        file.write(line)
 
     process = subprocess.Popen(
         [nasa_cea_executable],
@@ -390,24 +436,27 @@ def run_material_quench(filename, t_atm, p_atm, t_mat, t_stag, p_stag, t_air,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
     )
-    process.stdin.write(f"{quench_filename}\n".encode())
+    process.stdin.write(f"{wake_filename}\n".encode())
     process.stdin.close()
     process.wait()
-    if process.returncode != 0:
-        raise RuntimeError(process.stderr.read().decode())
+    try:
+        if process.returncode != 0:
+            raise RuntimeError(process.stderr.read().decode())
+        df_wake = readCEA(wake_filename)
+        if all_scenarios == False:
+            save_files(wake_filename)
+            save_results_excel(wake_filename, df_wake)
+    finally:
+        clean_directory(wake_filename)
 
-    df_quench = readCEA(quench_filename)
-    if all_scenarios == False:
-        save_files(quench_filename)
-        save_results_excel(quench_filename, df_quench)
-    clean_directory(quench_filename)
-    return df_quench
+    # Air per kg material for the EI balance: each kg of products takes up wake_rof kg of hot gas
+    rof_ei = rof_ab + wake_rof * (1.0 + rof_ab) if hotgas_wake else rof_ab
+    return df_wake, rof_ei
 
 
 def cantera_postshock_nox_state(gas, atm_composition, t_atm, p_atm, velocity, p_2):
     """Set 'gas' to the post-shock state the NOx formation is computed in; p in bar, v in m/s."""
-    # 'shock' solves Rankine-Hugoniot with equilibrium chemistry, 'tp'/'hp' equilibrate at the
-    # total enthalpy h1 + u1^2/2 and the post-shock pressure from compute_shockwave()
+    # 'shock' solves Rankine-Hugoniot, 'tp'/'hp' equilibrate at the total enthalpy and post-shock pressure
     pa_per_bar = 1e5
     gas.TPX = t_atm, p_atm * pa_per_bar, atm_composition
     h_1 = gas.enthalpy_mass
@@ -434,8 +483,7 @@ def cantera_postshock_nox_state(gas, atm_composition, t_atm, p_atm, velocity, p_
 
 def create_inp_file_bal(filename, df=None, *args, problem_override=None):
     """Write the NASA CEA input for the hot-gas (air/NOx) calculation."""
-    # 'tp'/'hp' equilibrate at the perfect-gas post-shock state from compute_shockwave(); 'shock' lets CEA do the jump itself from the undisturbed gas plus mach_1
-    # Call sites always pass mach_1; velocity is optional as the 7th value
+    # 'tp'/'hp' use the perfect-gas post-shock state, 'shock' lets CEA do the jump from the free stream
     t_ab, p_ab, t_atm, p_atm, df_air_massfractions = args[:5]
     mach_1 = args[5] if len(args) > 5 else None
     velocity_1 = args[6] if len(args) > 6 else None
@@ -443,8 +491,7 @@ def create_inp_file_bal(filename, df=None, *args, problem_override=None):
     problem = problem_override or problem_hotgas_calculation
 
     if problem == "shock":
-        # Below Mach 1 CEA writes an .out file without a MASS FRACTIONS block instead of
-        # failing, so catch it here; the call sites fall back to the emission factors
+        # Below Mach 1 CEA writes no MASS FRACTIONS block, so the callers fall back to the emission factors
         if not np.isfinite(mach_1) or mach_1 < shock_mach_min:
             raise ValueError(
                 "Mach 1 = {} is below shock_mach_min = {}; NASA CEA computes no shock "
@@ -456,8 +503,7 @@ def create_inp_file_bal(filename, df=None, *args, problem_override=None):
 
     air_species = {species: df_air_massfractions[species].values[0] for species in df_air_massfractions.columns}
 
-    # Drop reactants without mass: CEA still takes them into the element system and aborts the
-    # shock problem with 'M6202: MATH - log: SING error'
+    # Drop reactants without mass, CEA aborts the shock problem on them
     air_species = {k: v for k, v in air_species.items() if float(v) > 0.0}
 
     if len(air_species) > 24:
@@ -627,8 +673,7 @@ def get_material_data(material, df_material_data):
 
 # Copy necessary files to run NASA CEA in main directory
 def init_directory():
-    # Preparation
-    # Copy thermo.lib & trans.lib, because they are necessary in main directory for NASA CEA
+    # Copy thermo.lib and trans.lib into the working directory for NASA CEA
     files_to_copy = ["thermo.lib", "trans.lib"]
     for file in files_to_copy:
         try:
@@ -673,8 +718,7 @@ def clean_directory(filename):
    
 # Delete NASA CEA init files
 def clean_up():
-    # The condition used to be all_scenarios == 'Test', which is never true for a bool, so the
-    # sweep never ran; save_files() has already kept what was meant to be kept
+    # save_files() has already kept the files that should be kept
     file_extensions = ["*.lib", "*.inp", "*.out", "*.plt"]
     for ext in file_extensions:
         for filename in glob.glob(ext):
@@ -685,8 +729,7 @@ def clean_up():
                     print(f"Could not delete {filename}: {e}")
 
 def compute_shockwave(t_atm, p_atm, rho_atm, velocity, c_atm, kappa_mix, r_mix):
-    # Perfect-gas normal shock with the isentropic exponent and gas constant of the local
-    # NRLMSIS mixture, consistent with c_atm; p_atm may be given in any unit, p_2 follows it
+    # Perfect-gas normal shock with kappa and R of the local NRLMSIS mixture, p_2 has the unit of p_atm
     kappa = kappa_mix
     R = r_mix
 
@@ -807,9 +850,11 @@ def readCEA(filename):
                 raise ValueError(f"{filename}.out holds MOLE FRACTIONS instead of MASS "
                                  f"FRACTIONS - 'massf' is missing from the output line of "
                                  f"the CEA input.")
+            # Quote CEA's own message, the .out file is deleted after the run
+            cea_messages = [l.strip() for l in data.splitlines()
+                            if re.search(r"ERROR|OUTSIDE|WARNING|SINGULAR|NOT CONVERGE|STOPPED|MISSING|NOT FOUND|NOT IN", l, re.I)]
             raise ValueError(f"{filename}.out holds no MASS FRACTIONS block, NASA CEA wrote "
-                             f"no result. Typical causes: a temperature outside the range of "
-                             f"thermo.inp, or reactants with zero weight.")
+                             f"no result. CEA: {' | '.join(cea_messages[-4:]) or 'no error message in .out'}")
         lines = match.group(1).split("\n")
         lines2 = [line for line in lines if len(line) > 10]
         cleaned_lines = [line.strip().split() for line in lines2]
@@ -842,8 +887,7 @@ def readCEA(filename):
     # Read .out file
     with open(filename + ".out") as f:
         data = f.read() 
-    # A shock problem has one MASS FRACTIONS block per station, which read_problem() would
-    # match across in one greedy pattern
+    # A shock problem has one MASS FRACTIONS block per station, so read them separately
     if "SHOCK WAVE PARAMETERS ASSUMING" in data:
         return read_shock_out(filename)
 
@@ -1273,8 +1317,7 @@ def run_nasa_cea(df_trajaerodata, df_emission_factors, df_material_data, scenari
         timesteps = row_timesteps(filtered_rows_all)
         t_ab_records = {}   # idx -> material-combustion temperature
         total_emissions = pd.DataFrame()
-        # Air-shock emissions (all species) for rows without material ablation; rows with
-        # ablation get the shocked air through the material combustion
+        # Air-shock emissions only for rows without ablation, the others get the shocked air via the combustion
         total_nox_emissions = pd.DataFrame()
         if calculate_nox == True:
             if nox_method == "nasa_cea":
@@ -1330,15 +1373,14 @@ def run_nasa_cea(df_trajaerodata, df_emission_factors, df_material_data, scenari
             if compute_hotgas_state:
                 try:
                     afterburning_filename = f"{scenario_name}_nox_{idx}_{int(altitude)}km_{int(time)}s"
-                    # CEA shock first, 'hp' at the perfect-gas post-shock state as backup; if both
-                    # fail, the except branch keeps ambient air at the perfect-gas stagnation state
+                    # CEA shock first, then 'hp' at the perfect-gas post-shock state, else ambient air
                     df_output, _ = run_hotgas_cea(afterburning_filename, t_2, p_2, t_atm, p_atm,
                                                   df_air_massfractions_atm, mach_1, velocity)
                     
                     # Extract hot gas temperature
                     hotgas_temp_static = df_output.loc['t', 'exit']
 
-                    # Under 'shock' CEA solved the jump itself, so take mach_2, p_2, p_stag and the isentropic exponent from that solution rather than mixing it with compute_shockwave()'s perfect-gas values
+                    # Under 'shock' take mach_2, p_2, p_stag and the isentropic exponent from the CEA solution
                     kappa_hotgas = kappa_mix
                     if problem_hotgas_calculation == "shock" and "shock_state" in df_output.attrs:
                         shock_state_2 = df_output.attrs["shock_state"]
@@ -1387,6 +1429,7 @@ def run_nasa_cea(df_trajaerodata, df_emission_factors, df_material_data, scenari
 
             # Retry once with t_ab clamped to max(t_mat, t_air) before using emission factors
             t_ab_first = t_ab          # initial value, in case the second attempt overwrites it
+            t_out_hp = None            # CEA output temperature under 'hp'
             cea_success = False
             for attempt in range(2):
                 input_file_path = str(afterburning_filename)
@@ -1418,17 +1461,20 @@ def run_nasa_cea(df_trajaerodata, df_emission_factors, df_material_data, scenari
 
                     clean_directory(afterburning_filename)
 
-                    # Quench run: t_ab gives the reaction zone, not what reaches the atmosphere
-                    if material_quench_temperature:
+                    # Under 'hp' CEA computes the combustion temperature, so read it before the wake run
+                    t_out_hp = float(df_output.loc['t', 'exit']) if problem_material_combustion == "hp" else None
+
+                    # Wake run: t_ab gives the reaction zone, not what reaches the atmosphere
+                    rof_ei = rof_ab
+                    if material_wake_temperature:
                         try:
-                            df_output = run_material_quench(
-                                afterburning_filename, t_atm, p_atm, t_mat, t_stag, p_stag,
-                                t_air, p_ab, rof_ab, df_material_massfractions,
-                                df_air_massfractions_react)
-                        except Exception as quench_error:
-                            print(f"Quench calculation failed for row {idx} at "
-                                  f"{material_quench_temperature} K, keeping the combustion "
-                                  f"composition: {quench_error}")
+                            df_output, rof_ei = run_material_wake(
+                                afterburning_filename, df_output, df_air_massfractions_react,
+                                t_ab, p_ab, p_2, p_atm, rof_ab)
+                        except Exception as wake_error:
+                            print(f"Wake calculation failed for row {idx} at "
+                                  f"{material_wake_temperature} K, keeping the combustion "
+                                  f"composition: {wake_error}")
 
                     df_output_filtered = df_output.iloc[6:]
                     df_output_filtered.columns = ['ab_output_filtered']
@@ -1450,7 +1496,7 @@ def run_nasa_cea(df_trajaerodata, df_emission_factors, df_material_data, scenari
                     for species, row2 in combined_df.iterrows():
                         x_species = row2['ab_output_filtered']
                         x_species_atm = row2['air_massfractions']
-                        EI_species = (x_species * (rof_ab + 1)) - (x_species_atm * rof_ab)
+                        EI_species = (x_species * (rof_ei + 1)) - (x_species_atm * rof_ei)
                         if EI_species > threshold:
                             combined_species = pd.concat(
                                 [
@@ -1474,13 +1520,15 @@ def run_nasa_cea(df_trajaerodata, df_emission_factors, df_material_data, scenari
                     if attempt == 0:
                         print(f"NASA CEA error: {e} at time {time}s and material {mat_name}. Retrying with t_ab = max(t_mat, t_air).")
                         print('t_ab old',t_ab)
-                        t_ab = t_air
-                        t_ab = max(t_mat, t_ab)
+                        t_ab = max(t_mat, t_air)
                         print('t_ab new', t_ab)
                     else:
                         print(f"NASA CEA error: {e} at time {time}s and material {mat_name}. Using {emission_factor_method} emission factors.")
 
-            t_ab_records[idx] = format_t_ab(t_ab, t_ab_first)
+            if cea_success and t_out_hp is not None:
+                t_ab_records[idx] = t_out_hp
+            else:
+                t_ab_records[idx] = format_t_ab(t_ab, t_ab_first)
 
             if not cea_success:
                 mat_name = row.get('Material', 'Unknown')
@@ -1598,10 +1646,10 @@ def run_nasa_cea_scarab(df_trajaerodata, df_emission_factors, df_material_data, 
         filtered_rows = filtered_rows_all.loc[any_dm_positive].copy()
 
         t_ab_records = {}   # idx -> material-combustion temperature
+        hp_temps = {}       # idx -> [(CEA output temperature, massflow)] per material, 'hp' only
         total_emissions = pd.DataFrame()
 
-        # Air-shock emissions (all species) for rows without material ablation; rows with
-        # ablation get the shocked air through the material combustion
+        # Air-shock emissions only for rows without ablation, the others get the shocked air via the combustion
         total_nox_emissions = pd.DataFrame()
         if calculate_nox == True:
             if nox_method == "nasa_cea":
@@ -1659,21 +1707,19 @@ def run_nasa_cea_scarab(df_trajaerodata, df_emission_factors, df_material_data, 
             # Reaction input defaults to ambient air
             df_air_massfractions_react = df_air_massfractions_atm
 
-            # Hot-gas state for the material combustion, computed once per row: it supplies t_ab
-            # via temp_factor, t_air, p_ab and the reactant composition, regardless of nox_method
+            # Hot-gas state once per row, it supplies t_ab, t_air, p_ab and the reactants
             compute_hotgas_state = True
             if compute_hotgas_state:
                 try:
                     afterburning_filename = f"{scenario_name}_nox_{idx}_{int(altitude)}km_{int(time)}s"
-                    # CEA shock first, 'hp' at the perfect-gas post-shock state as backup; if both
-                    # fail, the except branch keeps ambient air at the perfect-gas stagnation state
+                    # CEA shock first, then 'hp' at the perfect-gas post-shock state, else ambient air
                     df_output, _ = run_hotgas_cea(afterburning_filename, t_2, p_2, t_atm, p_atm,
                                                   df_air_massfractions_atm, mach_1, velocity)
 
                     # Extract hot gas temperature
                     hotgas_temp_static = df_output.loc['t', 'exit']
 
-                    # Under 'shock' CEA solved the jump itself, so take mach_2, p_2, p_stag and the isentropic exponent from that solution rather than mixing it with compute_shockwave()'s perfect-gas values
+                    # Under 'shock' take mach_2, p_2, p_stag and the isentropic exponent from the CEA solution
                     kappa_hotgas = kappa_mix
                     if problem_hotgas_calculation == "shock" and "shock_state" in df_output.attrs:
                         shock_state_2 = df_output.attrs["shock_state"]
@@ -1762,17 +1808,21 @@ def run_nasa_cea_scarab(df_trajaerodata, df_emission_factors, df_material_data, 
                             save_results_excel(afterburning_filename, df_output)
                         clean_directory(afterburning_filename)
 
-                        # Quench run: t_ab gives the reaction zone, not what reaches the atmosphere
-                        if material_quench_temperature:
+                        # Under 'hp' CEA computes the combustion temperature, so read it before the wake run
+                        if problem_material_combustion == "hp":
+                            hp_temps.setdefault(idx, []).append((float(df_output.loc['t', 'exit']), massflow))
+
+                        # Wake run: t_ab gives the reaction zone, not what reaches the atmosphere
+                        rof_ei = rof_ab
+                        if material_wake_temperature:
                             try:
-                                df_output = run_material_quench(
-                                    afterburning_filename, t_atm, p_atm, t_mat, t_stag, p_stag,
-                                    t_air, p_ab, rof_ab, df_material_massfractions,
-                                    df_air_massfractions_react)
-                            except Exception as quench_error:
-                                print(f"Quench calculation failed for row {idx} at "
-                                      f"{material_quench_temperature} K, keeping the combustion "
-                                      f"composition: {quench_error}")
+                                df_output, rof_ei = run_material_wake(
+                                    afterburning_filename, df_output, df_air_massfractions_react,
+                                    t_ab, p_ab, p_2, p_atm, rof_ab)
+                            except Exception as wake_error:
+                                print(f"Wake calculation failed for row {idx} at "
+                                      f"{material_wake_temperature} K, keeping the combustion "
+                                      f"composition: {wake_error}")
 
                         df_output_filtered = df_output.iloc[6:]
                         df_output_filtered.columns = ['ab_output_filtered']
@@ -1790,7 +1840,7 @@ def run_nasa_cea_scarab(df_trajaerodata, df_emission_factors, df_material_data, 
                         for species, row2 in combined_df.iterrows():
                             x_species = row2['ab_output_filtered']
                             x_species_atm = row2['air_massfractions']
-                            EI_species = (x_species * (rof_ab + 1)) - (x_species_atm * rof_ab)
+                            EI_species = (x_species * (rof_ei + 1)) - (x_species_atm * rof_ei)
                             if EI_species > threshold:
                                 combined_species = pd.concat(
                                     [combined_species, pd.DataFrame({'species': [species], 'EI_species': [EI_species]})],
@@ -1812,7 +1862,12 @@ def run_nasa_cea_scarab(df_trajaerodata, df_emission_factors, df_material_data, 
                         else:
                             print(f"NASA CEA error: {e} at time {time}s and material {mat_name}. Using {emission_factor_method} emission factors.")
 
-                t_ab_records[idx] = format_t_ab(t_ab, t_ab_first)
+                if idx in hp_temps:
+                    # 'hp': massflow-weighted mean of the CEA output temperatures of the materials in this row
+                    t_ab_records[idx] = (sum(t * m for t, m in hp_temps[idx]) /
+                                         sum(m for _, m in hp_temps[idx]))
+                else:
+                    t_ab_records[idx] = format_t_ab(t_ab, t_ab_first)
 
                 if not cea_success:
                     # Fallback: stoichiometric EF for THIS material
@@ -1892,9 +1947,9 @@ def run_nasa_cea_scarab(df_trajaerodata, df_emission_factors, df_material_data, 
 
 
 #### Cantera Material Combustion - shared helpers ##########################################
-# Cantera equivalent of the NASA CEA material combustion (create_inp_file() with problem_material_combustion='tp'), using cea_species.yaml instead of a subprocess call; t_ab is t_mat here, the temp_factor refinement is not replicated
+# Cantera equivalent of the NASA CEA 'tp' material combustion with cea_species.yaml, here t_ab = t_mat
 
-# material_data.xlsx column -> its polymorph species, low-to-high temperature; only a tie-breaker, the actual choice comes from each species' own NASA9 ranges
+# material_data.xlsx column -> polymorph species (low to high temperature), only a tie-breaker for the NASA9 ranges
 CANTERA_ELEMENT_POLYMORPHS = {
     'AL(cr)': ['AL(cr)', 'AL(L)'],
     'Ag(cr)': ['Ag(cr)', 'Ag(L)'],
@@ -1923,8 +1978,7 @@ CANTERA_ELEMENT_POLYMORPHS = {
     'C(gr)': ['C(gr)'],
 }
 
-# Elements that go into the shared ideal-solid-solution alloy phase instead of their own
-# condensed phase; B/C/P/S/Si stay separate, they form no metallic solid solution
+# Elements in the shared alloy phase, B/C/P/S/Si stay separate
 CANTERA_METALLIC_ELEMENTS = {
     'AL(cr)', 'Ag(cr)', 'Co(a)', 'Cr(cr)', 'Cu(cr)', 'Fe(a)', 'Li(cr)', 'Mg(cr)', 'Mo(cr)',
     'Mn(a)', 'Nb(cr)', 'Ni(cr)', 'Pb(cr)', 'Sn(cr)', 'Ta(cr)', 'Ti(a)', 'V(cr)', 'W(cr)',
@@ -1939,8 +1993,7 @@ CANTERA_NONMETAL_PHASE_BY_SPECIES = {
     'Si(cr)': 'si_cr', 'Si(L)': 'si_l',
 }
 
-# Oxide products that thermo.inp only has as condensed species, added whenever their element
-# is present
+# Oxides that thermo.inp only has as condensed species, added when their element is present
 CANTERA_ELEMENT_OXIDE_PHASES = {
     'Cr(cr)': ['cr2o3_i_prime', 'cr2o3_i', 'cr2o3_l'],
     'Fe(a)': ['fe2o3_cr'],
@@ -1960,8 +2013,7 @@ def _get_cantera_species_db():
 
 def resolve_cantera_material_species(col, t_ab):
     """Column + t_ab -> the polymorph whose own NASA9 temperature ranges bracket t_ab."""
-    # Evaluated against the target equilibrium temperature, not t_mat: Cantera needs every
-    # initial species to be valid at the solve temperature, NASA CEA does not
+    # Checked at the target temperature, because Cantera needs every species valid there
     candidates = CANTERA_ELEMENT_POLYMORPHS.get(col)
     if not candidates:
         return None
@@ -2000,8 +2052,7 @@ def _equilibrate_cantera_material(t_ab, p_ab, rof_ab, material_cols, df_material
                 nonmetal_phase_names.add(phase_name)
         oxide_phase_names.update(CANTERA_ELEMENT_OXIDE_PHASES.get(col, []))
 
-    # Metallic reactants share one ideal-solid-solution alloy phase: Cantera's multiphase solver
-    # does not converge reliably with many near-zero-abundance condensed phases
+    # Metals share one alloy phase, many near-empty condensed phases do not converge
     solutions = [gas]
     if alloy_species_names:
         alloy = ct.Solution(thermo='ideal-condensed', species=[species_db[n] for n in alloy_species_names])
@@ -2076,7 +2127,7 @@ def hotgas_air_temp(hotgas_t_stag, t_total_2):
     elif hotgas_air_temperature == "cea_stagnation":
         value = hotgas_t_stag
     else:
-        raise ValueError(f"Unbekanntes hotgas_air_temperature: {hotgas_air_temperature!r}")
+        raise ValueError(f"Unknown hotgas_air_temperature: {hotgas_air_temperature!r}")
     return min(23999, value)
 
 
@@ -2120,10 +2171,10 @@ def combustion_temperature(t_mat, hotgas_temp_static, hotgas_t_stag, kappa_hotga
         t_ab = t_mat + (1 - (1 / 3) * (Pr_turb) ** (-0.6)) * (hotgas_t_stag - t_mat)
 
     elif isinstance(temp_factor, (int, float)):
-        t_ab = t_mat + temp_factor * (hotgas_temp_static - t_mat)
+        t_ab = t_mat + temp_factor * (hotgas_t_stag - t_mat)
 
     else:
-        raise ValueError(f"Unbekannter temp_factor: {temp_factor!r}")
+        raise ValueError(f"Unknown temp_factor: {temp_factor!r}")
 
     return max(t_ab, t_mat)
 
@@ -2149,14 +2200,13 @@ def hotgas_state(scenario_name, idx, altitude, time, t_atm, p_atm, t_mat,
 
     try:
         afterburning_filename = f"{scenario_name}_nox_{idx}_{int(altitude)}km_{int(time)}s"
-        # CEA shock first, 'hp' at the perfect-gas post-shock state as backup; if both
-        # fail, the except branch keeps ambient air at the perfect-gas stagnation state
+        # CEA shock first, then 'hp' at the perfect-gas post-shock state, else ambient air
         df_output, _ = run_hotgas_cea(afterburning_filename, t_2, p_2, t_atm, p_atm,
                                       df_air_massfractions_atm, mach_1, velocity)
 
         hotgas_temp_static = df_output.loc['t', 'exit']
 
-        # Under 'shock', CEA solved the jump itself; take mach_2, p_2, p_stag and the isentropic exponent from that solution instead of compute_shockwave()
+        # Under 'shock' take mach_2, p_2, p_stag and the isentropic exponent from the CEA solution
         kappa_hotgas = kappa_mix
         if problem_hotgas_calculation == "shock" and "shock_state" in df_output.attrs:
             shock_state_2 = df_output.attrs["shock_state"]
@@ -2196,8 +2246,7 @@ def hotgas_state(scenario_name, idx, altitude, time, t_atm, p_atm, t_mat,
 
 def run_cantera_material_combustion(t_ab, p_ab, rof_ab, df_material_massfractions, df_air_massfractions_react):
     """Equilibrate material and shocked air at (t_ab, p_ab), the Cantera 'tp' counterpart."""
-    # Returns (species, EI_species) as excess-over-ambient mass fractions per unit material
-    # mass; on failure the smallest included element is dropped and the call retried
+    # Returns (species, EI_species) per kg material, on failure the smallest element is dropped and retried
     material_cols = [
         c for c in df_material_massfractions.columns
         if c in CANTERA_ELEMENT_POLYMORPHS and float(df_material_massfractions.iloc[0][c]) > cantera_material_element_threshold_pct

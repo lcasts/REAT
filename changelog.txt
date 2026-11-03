@@ -1,6 +1,186 @@
-V0.6 Updated ballistic calculation with aero data, bug fixing emissions
-V0.5 Updated CEA calculation with new additional shock and real gas calculation; implemented material extraction from DRAMA and DEBRISK; implemented preliminary Cantera structural Emission calculation
-V0.4 Updated SCARAB calculation (Now considering all fragments), Bug fixing in DEBRISK and Cantera calculation
-V0.3 Updated Aero-Thermodynamic Combustion Model
-V0.2 Release with Integration of DRAMA, SCARAB, DEBRISK
-V0.1 Initial release
+Changelog containing the version history and information on new features
+
+V1.0.0 (2026-11)
+Added
+- Optional wake run on the combustion products (material_wake_temperature, hotgas_wake, wake_rof, material_wake_pressure); replaces the material quench run; off by default
+- Liquid phases of Ni, B, V, Nb, Mo, Ta and W in the CEA input
+- Options heat_flux_scaling (factor on the DRAMA heat flux) and drama_materials (use input_data/materials.xml instead of the DRAMA installation)
+- Scenario file can be set with the environment variable REAT_SCENARIO_FILE
+- Emission file names get the suffix _xab_<value> when all_scenarios = False
+- CEA error messages quote the CEA error lines
+- Use cases of the dissertation in scenarios.xlsx (UC_Falcon_9-435_*, UC_Starship_IFT-13_*) and the reconstructed trajectory input_data/Starship_IFT_13_trajectory_reconstructed.csv
+Changed
+- With problem_material_combustion = "hp" the column "Temp ab [K]" contains the CEA combustion temperature
+- Phase limits in the CEA input use >= and rounded transition temperatures
+- PyDrama scenario folders are named after the scenario instead of the vehicle, so scenarios with the same vehicle no longer overwrite each other
+- OwnScarab: break-up continuations of the main body (0.1 -> 1.1 -> 2.1 ...) are merged into one object (ObjectID) with a mass balance check; the compression runs per object
+- SCARAB projected area read from column 2 of arshad.hst
+- SCARAB output path anchored to the project folder instead of the working directory
+- SARA reflectivity coefficient 1.0 instead of 1.3, now set in config.py (reflectivity_coefficient)
+- Example_Ballistic in scenarios.xlsx is now a Starship ship re-entry with the columns A_ref and A_ref_axial
+- Code comments shortened
+Fixed
+- Overflowing CEA output fields ('*****-10') are read with their exponent instead of as 1.0
+- Numerical temp_factor uses the hot-gas stagnation temperature instead of the static temperature
+- ReferenceArea in DRAMA headers read with exponent notation (e.g. 4.28391e-05)
+- SCARAB time matching falls back to the nearest time whenever the exact match loses rows, so no demise mass is lost
+
+V0.6 (2026-09-14)
+Added
+- Angle-of-attack aerodynamics for the Ballistic trajectory from the new input workbook input_data/aero_data.xlsx (sheet "schedule": altitude_km or time_s and alpha_deg; sheet "coefficients": alpha_deg, c_d, ldr), read once and cached (get_aero_tables); new config options file_name_aero, sheet_name_aero_schedule, sheet_name_aero_coefficients
+- Optional scenario columns A_ref (broadside area) and A_ref_axial (nose-on area): c_b = mass / (C_D * A_ref); the NOx air mass uses the projected area A_ref*|sin(alpha)| + A_ref_axial*|cos(alpha)|; the ballistic trajectory output gets the column "ReferenceArea [m^2]"
+- Reference area for ballistic NOx from the trajectory's "ReferenceArea [m^2]", otherwise the scenario's A_ref, otherwise pi*R_n^2
+- NOx formation temperature for ballistic entries: the highest of shock-heated air, ambient air and (if present) the wall temperature T_rad_equil_comb
+- New config option scarab_output_folder_path; OwnScarab reads its result folders from <scarab_output_folder_path>/<reentry_vehicle>
+Changed
+- Hot-gas (air) calculation tries the CEA shock problem first, then CEA hp at the perfect-gas post-shock state; if both fail, ambient air at the perfect-gas stagnation state is used
+- The perfect-gas normal shock uses the isentropic exponent and gas constant of the local NRLMSIS mixture
+- Air-shock emissions report every species the shocked air gains over ambient air, not only NO/NO2 (NASA CEA and Cantera, including ballistic runs)
+- SCARAB/multi-material rows: the air of a row is shared between the ablating materials by their d_m share, so one rof_ab applies per row and the air is counted only once
+- Trajectory compression (DRAMA/DEBRISK/SCARAB) averages altitude, lat, lon, velocity and datetime within a bin instead of taking the last value
+- smart_round rounds to 5 significant digits
+- config.py defaults: delta_t 1.0 s, t_max 1750 s, aero_schedule_basis 'altitude', x_ab 4, fragmentation_altitude_f9 78600 m
+- Material data and emission factors: compositions of CuAgZr and Inconel718_Cu corrected, related emission factors updated
+- DRAMA models F9/GM1/GM2_Tumbling: component materials renamed to match material_data.xlsx (CC -> CCSiC, A316 -> A316L, CFRP_AA7075 -> LVA); F9_Tumbling component masses rescaled and break-up trigger set to 78.6 km
+- example_trajectory_ballistic.csv replaced by a longer example with the columns Time, date, Altitude, Lat, Lon, Velocity [m/s] and ReferenceArea [m^2]
+Fixed
+- rof_ab (air-to-material ratio) multiplies the air mass flow by the row time step, so it is compared with the material mass d_m ablated in that step; time steps are taken per object and stay correct after compression
+- Altitude binning in filter_emission_data_bal: the interval was wrongly multiplied by 1000
+- Ballistic emission output: species columns detected by content instead of "all columns after T_rad_equil_comb"; missing required columns are listed in the error
+- CEA reactant limit (more than 24 species): He/Ar also removed from ambient air, reactants ranked by mass per kg of material, species on both fuel and oxidiser side no longer overwritten
+- Object-dtype species columns converted to float before aggregation
+Removed
+- Config lists aero_reference_area, aero_schedule_x/alpha, aero_alpha, aero_cd and aero_ldr (replaced by aero_data.xlsx)
+- MonteCarlo and RISK input files from the F9/GM1/GM2_Tumbling DRAMA models
+- Material AACFRP from material_data.xlsx
+
+V0.5 (2026-09-09)
+Added
+- NASA CEA shock problem for the hot-gas/NOx calculation (problem_hotgas_calculation = "shock") with the options shock_flags, shock_state (inc_eq/inc_fz/ref_eq/ref_fz), shock_ions, shock_debug, shock_mach_min and shock_input ("u1": CEA derives the speed of sound from the local NRLMSIS composition; "mach1"); post-shock Mach number, pressure, stagnation pressure and isentropic exponent taken from the CEA solution
+- Option hotgas_air_temperature ("cea_stagnation" or "perfect_gas_stagnation") for the oxidiser temperature t_air
+- Real-gas atmosphere state: pressure from number density (p = n*k*T), mixture gas constant and isentropic exponent from the NRLMSIS composition for the speed of sound; new constants universal_gas_constant, boltzmann_constant, monatomic_species
+- Optional quench run (material_quench_temperature): combustion products re-equilibrated in a second CEA tp run
+- Material extraction from DRAMA objects.xml or the DEBRISK result CSV/XML (material_source = 'model') with the config dictionaries drama_material_map and debrisk_material_map; the default 'name' still uses the "_-_" suffix in the component name
+- Preliminary Cantera material combustion (use_cantera; run_cantera, run_cantera_scarab) based on cea_species.yaml: polymorph selection by temperature range, shared ideal-solid-solution alloy phase, element cut-off cantera_material_element_threshold_pct, output suffix _Cantera
+- Cantera post-shock NOx state: iterative Rankine-Hugoniot for "shock", total-enthalpy equilibrium for "tp"/"hp"
+- cea_species.yaml: condensed-phase entries (Cr2O3, Fe2O3, V2O5 and pure elemental condensed species) as fixed-stoichiometry phases
+- Output column "Temp ab [K]" (material combustion temperature); if the CEA retry changed it, both values are given as "T_new (T_old)"
+- DRAMA input: pre-/post-break-up phase assignment (column Phase), duplicate time steps removed, d_m per object from the mass history
+- PyDrama writes the break-up altitude into the breakUpTriggers of objects.xml (fragmentation_altitude, fragmentation_altitude_f9)
+- Ballistic trajectory: optional angle-of-attack schedule with C_D(alpha) and L/D(alpha) tables in config.py (aero_schedule_basis 'altitude'/'time', linear or step interpolation), adaptive sub-stepping, upper altitude bound h_max and stop at t_max, new output columns AoA [deg], C_D, c_b and L/D
+- Example scenarios in scenarios.xlsx: Example_Ballistic, Example_OwnBallistic, Example_Generic_Model__pyDRAMA, Example_Falcon_9_pyDRAMA, Example_DEBRISK, Example_SCARAB, Example_OwnDRAMA
+- Materials CCSiC, Cu and LVA in material_data.xlsx and emission_factors.xlsx; oxide columns B2O3, CoO, Li2O, MoO3, Nb2O5, P2O5, SO2, Ta2O5, WO3, ZrO2 in emission_factors.xlsx
+- output_data/helper_scripts/plot_emissions.py rewritten: altitude-binned stacked bars, share pie chart, Excel summary
+Changed
+- Combustion temperature (temp_factor) moved into one function; the material temperature t_mat is the lower bound; mix_temperature uses the hot-gas temperature and t_mat
+- Without a CEA shock solution (e.g. below shock_mach_min), t_ab falls back to the perfect-gas stagnation state
+- Standalone air-shock NOx only for rows without material ablation; rows with ablation get the shocked air through the material combustion
+- Emission factor method "atomic" renamed to "elemental"; only "elemental" and "stoichiometric" are provided, the "REAT" altitude-band factors were removed
+- config.py restructured into regions per trajectory source; defaults x_ab 1.2, temp_factor roberts_lam, problem_hotgas_calculation "shock", t_max 750 s
+- OwnScarab/OwnDebrisk read their data from input_data/<reentry_vehicle>
+- Output files get unique names instead of being overwritten
+- Plot scripts moved to output_data/helper_scripts/
+- The DRAMA package is imported only when PyDrama is used
+- SCARAB material map: cc-sic-ceramic -> CCSiC, a316 -> A316L
+- Generic-model component matching uses names without the material suffix; GM1 total mass 5300 kg
+Fixed
+- main.py skips a scenario whose trajectory failed; before, the emission block ran on the previous scenario's data
+- Ballistic Cantera NOx: interaction area applied to the area (as in the CEA path), pressure converted from Pa to bar
+- Undefined variables in the mix_temperature and hot-gas branches
+- The material emission file name no longer uses the altitude from the NOx loop
+- The raw-file cleanup never ran (condition all_scenarios == 'Test')
+- CEA robustness: executable path normalised for Windows, zero-mass reactants removed (CEA error M6202), overflowing '******' fields parsed, missing MASS FRACTIONS block below Mach 1 caught with fallback to emission factors, empty species tables no longer raise KeyError
+- Emission factor fallback restricted to the configured emission_factor_method
+- Cantera material path: NOx only calculated if calculate_nox is set
+- Scenario file name in config reset to scenarios.xlsx
+Removed
+- DRAMA models F9_Fixed, GM1_Fixed and GM2_Fixed
+- The old Falcon_9_US generic-model branch in pydrama()
+- input_data/trajectory.csv and input_data/example_trajectory_demise_output.csv
+- The 2019 re-entry scenarios and Test_Capsule from scenarios.xlsx
+- Materials AAITS, AATF, AATFU, AATOX, ACP, AENG, AFS and CC (material data), and A316, AA7475, AACFRP, CFRPAl, SiCu and related entries (emission factors)
+
+V0.4 (2026-08-18)
+Added
+- SCARAB import considers all fragments: materials read per fragment from material.lst, material columns created dynamically (SCARAB_MATERIAL_NAME_MAP, warning for unmapped materials), mass not passed to the child fragments at a break-up booked as d_m and split by material share
+- NOx calculation (NASA CEA or Cantera) in the SCARAB emission factor path (emission_factors_scarab)
+- Cantera helpers: species names resolved case-insensitively, atmospheric composition restricted to and renormalised over the species of the loaded phase; new config option ct_species_phase_name ('nox_emission')
+Changed
+- OwnScarab/OwnDebrisk read their folder from file_name_ext_trajectory; DEBRISK uses the first .dat file in that folder
+- OwnDebrisk trajectories compressed like DRAMA data
+- run_nasa_cea_scarab uses the same hot-gas/temp_factor logic as the DRAMA path, retries CEA once with t_ab = max(t_mat, t_air) before falling back to emission factors, NOx only for rows without material ablation
+- Ballistic Cantera NOx temperature: min(23999 K, max(T_rad_equil_comb, post-shock T, ambient T))
+- Pr_lam 0.72 -> 0.7
+- cea_species.yaml phase renamed to nox_emission
+- plot_trajectory.py converts km/s to m/s; plot scripts use OS-independent paths; plot_map.py comments and messages in English
+- README: citation year 2026, new contact address, folder structure updated
+Fixed
+- temp_factor "isentropic" sets t_ab (before, the result was unused)
+- SCARAB time merge: times rounded, nearest-time merge as fallback when the exact merge gives no rows
+- SCARAB: missing NOx results no longer break the pivot; str_replace typo fixed
+- emission_factors_scarab restricted to the configured emission_factor_method
+- NOx error fallback has the correct species/EI format
+- Ballistic output column 'Velocity [k/s]' renamed to 'Velocity [m/s]'
+Removed
+- Example DRAMA model Falcon_9_US including all SARA output files, and the old generic model GM_F9US
+- Duplicate gitkeep files without the leading dot
+
+V0.3.1 (2026-08-17)
+Added
+- input_data/cea_species.yaml: NASA CEA thermo data converted for Cantera (referenced since V0.3 but missing)
+Fixed
+- temp_factor roberts_lam/roberts_turb use the hot-gas stagnation temperature instead of the static temperature
+
+V0.3 (2026-06-29)
+Added
+- Aero-thermodynamic combustion model for DRAMA/DEBRISK and SCARAB: normal-shock relations (compute_shockwave), CEA hot-gas run on the shocked air (tp/hp, problem_hotgas_calculation) used as oxidiser, combustion temperature t_ab via the option temp_factor (roberts_lam, roberts_turb, eckert_lam, eckert_turb, mix_temperature, isentropic or a numeric factor)
+- Config options Pr_lam, Pr_turb, x_ab (replaces rof_f), problem_material_combustion, problem_hotgas_calculation, file_name_ct_species, fragmentation_altitude
+- CEA retry with t_ab = max(t_mat, t_air), then fallback to emission factors
+- Emission factor method selection (emission_factor_method, new method "atomic")
+- NOx calculation also in the emission factor path (when NASA CEA is off)
+- Emission factors, CEA and Cantera in the same run, saved separately as EMIS_<scenario>_Emission_Factor/_CEA/_Cantera
+- PyDrama: DRAMA models GM1, GM2 and F9, each as _Fixed and _Tumbling (fixed attitude sets angle of attack, sideslip and bank to 0); generic-model scaling for GM1/GM2, F9 copied unscaled; SARA console output and config saved to sara_log.txt
+- Ballistic Cantera NOx (run_cantera_bal, replaces calculate_NO_emissions) with the temperature from post-shock/wall temperature
+- New materials and element columns in material_data.xlsx and emission_factors.xlsx (A316L, AA2195, AA5056, AA6061, AA7075, CFRP_AA7075, CuAgZr, Elec, Hastelloy-X, Inconel718_Cu and others)
+- Example files example_trajectory_ballistic.csv and example_trajectory_demise_output.csv; 2019 re-entry scenarios
+- Plot scripts plot_map.py and plot_trajectory.py
+Changed
+- Per-scenario error handling in main.py; scenarios without trajectory data are skipped
+- PyDrama scenario folders moved to input_data/scenarios/<vehicle>; wind disabled
+- Cantera uses cea_species.yaml instead of gri30.yaml
+- Emission output: new columns scenario, reentry_vehicle and total_sum_emissions; rows without emissions removed; sum column renamed to total_sum_species
+- Raw CEA files saved only when all_scenarios = False
+- Defaults: compress_lat/lon 0.5 deg, trace 1e-15, threshold 1e-15
+- cleanup_output_data.py also clears input_data/scenarios/ and leftover CEA files (.inp/.out/.plt)
+- plot_emissions.py adapted to the new output columns
+- requirements.txt: version pins removed, tqdm added
+Removed
+- The old generic model GM_F9US branch in pydrama()
+- Config options afterburning, rof_f and problem_afterburning
+
+V0.2 (2025-09-29)
+Added
+- Trajectory option OwnScarab: reads the SCARAB fragment folders (frag.lst, mas.hst, masmat.hst, trj.hst, tqm.hst, arshad.hst), mass loss per fragment and per material, separate emission factor and NASA CEA functions (emission_factors_scarab, run_nasa_cea_scarab) and compression
+- Trajectory option OwnDebrisk: reads the DEBRISK .dat output (zones named "<component>_-_<material>"), mass loss per zone
+- Trajectory compression for DRAMA/PyDrama data (compress_trajaerodata_dataframe), output TRAJ_COMP_<scenario>.csv
+- Liquid/allotropic phase selection of Al, Li, Ag, Mg and Mn in the CEA input, depending on the material temperature
+- Check for user_defined_scenarios missing in scenarios.xlsx
+- Output folders data_raw, emissions, trajectory
+Changed
+- Temporary CEA files deleted instead of moved to data_raw; overflowing '******' values in the CEA output replaced
+- Raw trajectory saved as TRAJ_RAW_<scenario>.csv; downrange added to the emission output
+- Defaults: rof_f 2, nox_method nasa_cea, calculate_nox False
+- Generic model GM_F9US objects.xml geometry and masses changed
+- README: new trajectory options and naming convention "_-_" for component materials
+
+V0.1 (2025-04-24)
+Added
+- Initial release of REAT (Re-entry Emission Assessment Tool)
+- Trajectory options Ballistic ((semi-)ballistic trajectory with convective/radiative heat flux and radiative-equilibrium wall temperature), OwnBallistic (external trajectory file), PyDrama (DRAMA/SARA via the Python package, scalable generic model GM_F9US) and OwnDrama (existing DRAMA results)
+- Atmosphere from pymsis (NRLMSIS)
+- Structural emissions for DRAMA runs via emission factors (per material and altitude interval) or NASA CEA (TP/HP, with afterburning)
+- NOx for ballistic runs via Cantera (GRI-Mech 3.0, HP equilibrium) or NASA CEA
+- Data compression by time or altitude interval and lat/lon bins
+- Input files config.py, scenarios.xlsx, emission_factors.xlsx, material_data.xlsx, trajectory.csv
+- Example DRAMA model Falcon_9_US with SARA outputs
+- Utilities plot_emissions.py and cleanup_output_data.py

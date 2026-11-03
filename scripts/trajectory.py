@@ -310,8 +310,7 @@ def ballistic_traj(df_scenarios,scenario_name, delta_t):
 
         prev = results[-1]  # Use the previous step
 
-        # Adaptive sub-stepping: split delta_t until each explicit Euler step changes the
-        # velocity by less than ~20%, keeping one output row per nominal delta_t
+        # Adaptive sub-stepping keeps the velocity change per Euler step below ~20 %
         v_x, v_y = prev['v_x'], prev['v_y']
         alt_m = prev['Altitude [m]']
         x = prev['Downrange [m]']
@@ -339,8 +338,7 @@ def ballistic_traj(df_scenarios,scenario_name, delta_t):
             a_drag = p_dyn / ballistic_coefficient
             n_drag = a_drag / g_0
 
-            # Drag along the velocity vector, not via cos/sin of the flight path angle: near
-            # vertical descent a slightly negative v_x flips that angle and reverses the drag
+            # Drag along the velocity vector, so a slightly negative v_x near vertical descent does not reverse it
             v_mag = max(velocity, 1e-12)
             a_drag_x = a_drag * (v_x / v_mag)
             a_drag_y = a_drag * (v_y / v_mag)
@@ -517,8 +515,8 @@ def pydrama(df_scenarios,scenario_name):
         else:
             print(colors.BOLD + colors.GREEN + "PyDrama: Successfully extracted scenario data." + colors.END)
         
-        # Scenario Folder & Files
-        scenario_folder_path = os.path.join(input_data_folder_path,"scenarios",reentry_vehicle)
+        # Scenario folder named after the scenario, so scenarios with the same vehicle do not overwrite each other
+        scenario_folder_path = os.path.join(input_data_folder_path,"scenarios",str(scenario_name))
         print('scenario_folder_path',scenario_folder_path)
         print(colors.BOLD + colors.GREEN + "PyDrama: Scenario folder path:" + scenario_folder_path + colors.END)
         input_data_folder = os.path.join(scenario_folder_path, "SARA", "REENTRY", "input")
@@ -545,7 +543,7 @@ def pydrama(df_scenarios,scenario_name):
                     open(path, "w").close()
     except Exception as e:
         handle_error(e, "pydrama", "Error while loading scenario data.")
-        # Without raise this would continue with undefined scenario data; main.py catches per-scenario exceptions and moves on
+        # Re-raise, main.py skips the scenario
         raise
     
     # 02 - Loading Generic Model Data    
@@ -592,7 +590,7 @@ def pydrama(df_scenarios,scenario_name):
         print(colors.BOLD + colors.GREEN + "PyDrama: Scenario setup completed successfully." + colors.END)       
     except Exception as e:
         handle_error(e, "pydrama", "Error while loading generic model data.")
-        # Without raise this would continue without a valid Generic Model; main.py catches per-scenario exceptions and moves on
+        # Re-raise, main.py skips the scenario
         raise
     
     # 03 - Update Scenario Model Data
@@ -702,8 +700,7 @@ def pydrama(df_scenarios,scenario_name):
                             obj.find("mass").text = str((500.0/gm_total_mass) * sc_mass)
                             obj.find("relativePosition/cartX").text = str((0.45/gm_total_height) * sc_height)
 
-                    # Break-up altitude from the config; it lives in <breakUpTriggers> of the
-                    # <connection-to> elements, not in <object>
+                    # Break-up altitude from the config goes into <breakUpTriggers> of the <connection-to> elements
                     for trigger in root.iter("breakUpTriggers"):
                         trigger_altitude = trigger.find("altitude")
                         if trigger_altitude is not None:
@@ -833,8 +830,7 @@ def pydrama(df_scenarios,scenario_name):
                             obj.find("primitive/ring/innerRadius").text = str((1.75/gm_total_radius) * sc_radius)
                             obj.find("mass").text = str((195.0/gm_total_mass) * sc_mass)
 
-                    # Break-up altitude from the config; it lives in <breakUpTriggers> of the
-                    # <connection-to> elements, not in <object>
+                    # Break-up altitude from the config goes into <breakUpTriggers> of the <connection-to> elements
                     for trigger in root.iter("breakUpTriggers"):
                         trigger_altitude = trigger.find("altitude")
                         if trigger_altitude is not None:
@@ -849,8 +845,7 @@ def pydrama(df_scenarios,scenario_name):
                     shutil.copy2(gm_file, sc_file)
     
         if generic_model in ("F9_Tumbling", "F9_Fixed"):
-            # F9 is copied unscaled, but still get their break-up altitude from the
-            # config - each with its own parameter, the F9 value comes from an observed re-entry
+            # F9 is copied unscaled but gets its break-up altitude from fragmentation_altitude_f9
             break_up_altitude = fragmentation_altitude_f9
             for key, gm_file in gm_input_file_paths.items():
                 sc_file = sc_input_file_paths[key]
@@ -876,13 +871,28 @@ def pydrama(df_scenarios,scenario_name):
         print(colors.BOLD + colors.GREEN + "PyDrama: Scenario Model Update completed successfully." + colors.END)
     except Exception as e:
         handle_error(e, "pydrama", "Error while updating the generic model data file.")
-        # Without raise, SARA would silently start with whatever objects.xml is left in the scenario folder, e.g. the previous scenario's model; main.py catches per-scenario exceptions and moves on
+        # Re-raise so SARA does not run with an outdated objects.xml, main.py skips the scenario
         raise
     
     # 04 - Run PyDrama Simulation
     try:
         # Setup model and config
         mymodel = sara.get_model(project=scenario_folder_path)
+
+        # Heat flux scaling on top of the factor already set in the model
+        for el in mymodel.el:
+            el.hf = float(el.hf) * heat_flux_scaling
+
+        # Material data: by default PyDrama uses the materials.xml of the DRAMA installation
+        sara_run_kwargs = {}
+        if drama_materials == "input_data":
+            materials_source = os.path.join(input_data_folder_path, "materials.xml")
+            if not os.path.isfile(materials_source):
+                raise FileNotFoundError(f"drama_materials = 'input_data', but '{materials_source}' does not exist.")
+            shutil.copy2(materials_source, os.path.join(input_data_folder, "materials.xml"))
+            sara_run_kwargs["project"] = scenario_folder_path
+        elif drama_materials != "default":
+            raise ValueError(f"drama_materials must be 'default' or 'input_data', got {drama_materials!r}")
         config = {
             'beginDate': sc_begin_date,
             
@@ -900,7 +910,7 @@ def pydrama(df_scenarios,scenario_name):
             "element4": sc_velocity,               # Velocity [km/s]
             "element5": sc_flight_path_angle,       # Flight path angle [°]
             "element6": sc_heading_angle,           # Heading angle [°]
-            "reflectivityCoefficient": 1.3,
+            "reflectivityCoefficient": reflectivity_coefficient,
             
             # 'coordinateSystem': 'keplerian',
             # 'element1': 6378 + 480,            # Semi-major axis (r_earth + altitude)
@@ -938,7 +948,8 @@ def pydrama(df_scenarios,scenario_name):
         os.makedirs(output_data_folder, exist_ok=True)
         sara_buffer = io.StringIO()
         with contextlib.redirect_stdout(sara_buffer):
-            results = sara.run(config, model=mymodel, keep_output_files="all", save_output_dirs=output_data_folder)
+            results = sara.run(config, model=mymodel, keep_output_files="all", save_output_dirs=output_data_folder,
+                               **sara_run_kwargs)
 
         # Echo captured output to console
         captured = sara_buffer.getvalue()
@@ -947,7 +958,9 @@ def pydrama(df_scenarios,scenario_name):
         # Write log file
         with open(log_path, "w", encoding="utf-8") as log_file:
             log_file.write("=== SARA Run Config ===\n")
-            log_file.write(str(config) + "\n\n")
+            log_file.write(str(config) + "\n")
+            log_file.write(f"heat_flux_scaling: {heat_flux_scaling}\n")
+            log_file.write(f"drama_materials: {drama_materials}\n\n")
             log_file.write("=== SARA Console Output ===\n")
             log_file.write(captured + "\n")
             log_file.write("=== SARA Results ===\n")
@@ -957,7 +970,7 @@ def pydrama(df_scenarios,scenario_name):
         print(colors.BOLD + colors.GREEN + "PyDrama: Finished Simulation" + colors.END)
     except Exception as e:
         handle_error(e, "pydrama", "Error while running PyDrama Simulation.")
-        # Without raise, an aborted run would return an incomplete run_NN folder and be silently processed further; main.py catches per-scenario exceptions and moves on
+        # Re-raise so an incomplete run folder is not processed, main.py skips the scenario
         raise
 
     # 05 - Rename PyDrama Results Folder

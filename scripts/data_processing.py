@@ -44,8 +44,7 @@ def get_aero_tables(force_reload=False):
     schedule.columns = [str(c).strip() for c in schedule.columns]
     coefficients.columns = [str(c).strip() for c in coefficients.columns]
 
-    # The basis column is named after the basis, so a workbook cannot be used with the
-    # wrong aero_schedule_basis by accident
+    # The basis column is named after the basis, so a workbook cannot be used with the wrong aero_schedule_basis
     basis_column = 'time_s' if aero_schedule_basis == 'time' else 'altitude_km'
     for frame, column, sheet in ((schedule, basis_column, sheet_name_aero_schedule),
                                  (schedule, 'alpha_deg', sheet_name_aero_schedule),
@@ -123,9 +122,7 @@ def get_input_data():
     except Exception as e:
         handle_error(e, "get_input_data", "Input data could not be processed")     
 
-# --- Component materials from the simulation file (material_source = 'model') ---------
-# DRAMA keeps them in objects.xml, DEBRISK in the result CSV/XML; the generic tool names are
-# mapped onto the material database via drama_material_map / debrisk_material_map.
+# --- Component materials from objects.xml (DRAMA) or the result CSV/XML (DEBRISK) ---
 def map_tool_material(raw_material, mapping, tool):
     """Map a tool-specific material name onto the material database. None if unusable."""
     if raw_material is None:
@@ -241,8 +238,7 @@ def drama_input(df_scenarios,scenario_name, pydrama_results_folder=None):
     reentry_time = df_scenarios.loc[scenario_name, 'date']
     result_list = []
 
-    # DRAMA writes two aerothermal files per component: one for the pre-break-up phase, which
-    # has no trajectory of its own and follows the compound track, and one after break-up
+    # DRAMA writes one aerothermal file per component before break-up (compound track) and one after
     traj_index = {}
     for traj_file in trajectory_files:
         try:
@@ -297,8 +293,7 @@ def drama_input(df_scenarios,scenario_name, pydrama_results_folder=None):
     # 3) Combine All Results into a Single DataFrame
     if result_list:
         df_trajaerodata = pd.concat(result_list, ignore_index=True)
-        # Join both phases into one history: the break-up sample appears in both files, so drop
-        # it once and rebuild 'd_m [kg]' over the full history
+        # Join both phases into one history, drop the duplicated break-up sample and rebuild 'd_m [kg]'
         df_trajaerodata = (df_trajaerodata
                            .sort_values(['ObjectID', 'Time [s]'])
                            .drop_duplicates(subset=['ObjectID', 'Time [s]'], keep='first')
@@ -332,8 +327,7 @@ def drama_input(df_scenarios,scenario_name, pydrama_results_folder=None):
         print("No valid results were generated.")
         return df_trajaerodata
 
-# Parse a SCARAB fragment's material.lst into a {column_number: material_name} map.
-# The column numbering in masmat.hst is fragment-specific, so this must be re-parsed per fragment.
+# Parse a fragment's material.lst into {column_number: material_name}, the numbering is fragment-specific
 def parse_scarab_material_list(fragment_path):
     material_list_path = os.path.join(fragment_path, 'material.lst')
     material_map = {}
@@ -346,8 +340,7 @@ def parse_scarab_material_list(fragment_path):
                 material_map[match.group(1)] = match.group(2)
     return material_map
 
-# Fallback merge on TIME[S] for the 3-decimal rounding of tqm.hst/masmat.hst, used only when the
-# exact merge comes back empty
+# Nearest-time merge on TIME[S] for the 3-decimal rounding of tqm.hst/masmat.hst
 def merge_asof_on_time(left, right, tolerance=0.005):
     left = left.sort_values('TIME[S]')
     right = right.sort_values('TIME[S]')
@@ -435,8 +428,7 @@ def scarab_input(df_scenarios, scenario_name):
             tqm_path = os.path.join(fragment_path, 'tqm.hst')
             arshad_path = os.path.join(fragment_path, 'arshad.hst')
             
-            # masmat.hst has numeric column IDs; material.lst resolves them, per fragment
-            # A missing .hst file used to leave the previous fragment's dataframe in place
+            # masmat.hst has numeric column IDs that material.lst resolves per fragment
             missing = [os.path.basename(p) for p in (masmat_path, mas_path, trj_path, tqm_path, arshad_path)
                        if not os.path.isfile(p)]
             if missing:
@@ -494,18 +486,21 @@ def scarab_input(df_scenarios, scenario_name):
                 print('No tqm.hst file found in ', fragment_path)
 
             # import and wrangle data containing information about the projected surface area in the direction of flight (in arshad.hst)
+            # Column 2 is the projected area (checked against m/beta of ball.hst), column 3 is not an area
             if os.path.isfile(arshad_path):
                 df_area = pd.read_csv(arshad_path, sep="\\s+",
-                                     names=['TIME[S]', 'UNKNOWN', 'PROJ_AREA[M^2]'])
+                                     names=['TIME[S]', 'PROJ_AREA[M^2]', 'UNKNOWN'])
                 df_area['TIME[S]'] = df_area['TIME[S]'].round(4)
             else:
                 print('No arshad.hst file found in ', fragment_path)
             
             
-            # Exact time match first, tolerant nearest match only if that comes back empty
+            # Exact time match first, nearest-time match if that loses rows (tqm.hst prints only 3 decimals)
             df_frag = build_fragment_df(merge_exact_on_time, df_mas, df_tqm, df_trj, df_area, df_masmat)
-            if df_frag.empty:
-                df_frag = build_fragment_df(merge_asof_on_time, df_mas, df_tqm, df_trj, df_area, df_masmat)
+            if len(df_frag) < len(df_mas.drop_duplicates('TIME[S]')):
+                df_frag_tolerant = build_fragment_df(merge_asof_on_time, df_mas, df_tqm, df_trj, df_area, df_masmat)
+                if len(df_frag_tolerant) > len(df_frag):
+                    df_frag = df_frag_tolerant.reset_index(drop=True)
             df_frag['frag_id'] = str(folder)
             
             # compute change in mass (dm: mass of the current time step - mass of the former time step)
@@ -575,14 +570,12 @@ def scarab_input(df_scenarios, scenario_name):
     # compute change in material mass for every material (dm: material mass of the current time step - material mass of the former time step)
     df_fragments = df_fragments.sort_values(by=['FragmentID', 'Time [s]'])
 
-    # masmat.hst reports 0 in the last row of a fragmenting parent: that mass is handed to the
-    # children, not ablated, so the diff into that handoff row must not count as mass loss
+    # The last masmat.hst row of a fragmenting parent is a handoff to the children, not mass loss
     frag_status = df_frag_list.set_index('frag_id')['status']
     is_last_row = df_fragments['Time [s]'] == df_fragments.groupby('FragmentID')['Time [s]'].transform('max')
     is_handoff_row = is_last_row & df_fragments['FragmentID'].map(frag_status).eq('Fragmentation')
 
-    # Birth gap: the parent's last mass minus the children's first masses is real ablation that
-    # neither side's diff covers, so book it on the parent's handoff row
+    # Birth gap: the parent's last mass minus the children's first masses is ablation booked on the handoff row
     first_mass_by_frag = df_fragments.groupby('FragmentID')['Total Fragment Mass [kg]'].first()
     children_by_parent = df_frag_list.loc[df_frag_list['parent'] != '-'].groupby('parent')['frag_id'].apply(list)
     for parent_id, children in children_by_parent.items():
@@ -596,8 +589,7 @@ def scarab_input(df_scenarios, scenario_name):
         if gap > 0:
             df_fragments.loc[parent_mask, 'd_m [kg]'] = df_fragments.loc[parent_mask, 'd_m [kg]'].fillna(0) + gap
 
-    # A handoff row carries real ablation but no per-material split, so distribute it over the
-    # materials in the composition of the previous row
+    # A handoff row has no per-material split, so distribute it by the composition of the previous row
     prev_material = df_fragments.groupby('FragmentID')[material_cols].shift(1)
     prev_material_sum = prev_material.sum(axis=1)
     handoff_total_dm = df_fragments['d_m [kg]']  # already includes the birth-gap addition above
@@ -609,11 +601,59 @@ def scarab_input(df_scenarios, scenario_name):
         frac = (prev_material[col] / prev_material_sum).where(prev_material_sum > 0, 0.0)
         df_fragments.loc[is_handoff_row, dm_col] = (handoff_total_dm * frac).loc[is_handoff_row]
 
-    # reorder dataframe
     dm_material_cols = [f'd_m {col}' for col in material_cols]
+
+    # ObjectID: the continuation of a body after a break-up (child with the largest start mass) keeps the parent's ID
+    def frag_sort_key(frag_id):
+        # Parents (lower break-up level) first, ids that are not 'level.number' last
+        try:
+            return tuple(int(p) for p in frag_id.split('.'))
+        except ValueError:
+            return (float('inf'),)
+
+    object_id = {}
+    for frag_id in sorted(df_frag_list['frag_id'], key=frag_sort_key):
+        object_id.setdefault(frag_id, frag_id)
+        children = children_by_parent.get(frag_id, [])
+        if children:
+            continuation = max(children, key=lambda c: (first_mass_by_frag.get(c, 0.0), c.endswith('.1')))
+            object_id[continuation] = object_id[frag_id]
+    df_fragments['ObjectID'] = df_fragments['FragmentID'].map(object_id).fillna(df_fragments['FragmentID'])
+
+    dm_check_cols = ['d_m [kg]', *dm_material_cols]
+    dm_before = df_fragments[dm_check_cols].fillna(0).sum()
+
+    # The first row of a continuation repeats the parent's handoff time step and is dropped
+    first_row = df_fragments['Time [s]'] == df_fragments.groupby('FragmentID')['Time [s]'].transform('min')
+    is_continuation = df_fragments['ObjectID'] != df_fragments['FragmentID']
+    handoff_time = (df_fragments[is_handoff_row].set_index('FragmentID')['Time [s]'])
+    parent_of = df_frag_list.set_index('frag_id')['parent']
+    parent_handoff_time = df_fragments['FragmentID'].map(parent_of).map(handoff_time)
+    drop_duplicate = first_row & is_continuation & ((df_fragments['Time [s]'] - parent_handoff_time).abs() < 1e-3)
+
+    # Fragments born with zero mass are dropped, their mass is already counted in the parent
+    zero_mass_frag = df_fragments.groupby('FragmentID')['Total Fragment Mass [kg]'].transform(lambda s: s.fillna(0).max() <= 0)
+    zero_dm_frag = df_fragments.groupby('FragmentID')['d_m [kg]'].transform(lambda s: s.fillna(0).sum() <= 0)
+    drop_zero_mass = zero_mass_frag & zero_dm_frag
+
+    n_zero_mass_frags = df_fragments.loc[drop_zero_mass, 'FragmentID'].nunique()
+    df_fragments = df_fragments[~(drop_duplicate | drop_zero_mass)].copy()
+
+    # Mass check: only rows without d_m may be dropped
+    dm_after = df_fragments[dm_check_cols].fillna(0).sum()
+    dm_lost = (dm_before - dm_after).abs()
+    if (dm_lost > 1e-6 * max(1.0, dm_before['d_m [kg]'])).any():
+        print(colors.BOLD + colors.RED + f"SCARAB: d_m lost when merging fragments into objects:\n{dm_lost[dm_lost > 0]}" + colors.END)
+    print(f"SCARAB objects: {df_fragments['FragmentID'].nunique()} fragments -> {df_fragments['ObjectID'].nunique()} objects; "
+          f"dropped {int(drop_duplicate.sum())} duplicate break-up rows and {int(drop_zero_mass.sum())} rows of "
+          f"{n_zero_mass_frags} zero-mass fragments; "
+          f"d_m {dm_before['d_m [kg]']:.3f} kg before, {dm_after['d_m [kg]']:.3f} kg after")
+
+    # reorder dataframe
+    df_fragments = df_fragments.sort_values(by=['ObjectID', 'Time [s]', 'FragmentID'])
     df_fragments = df_fragments[[
         "Time [s]", "Altitude [km]", "Lat [deg]", "Lon [deg]", "Velocity [km/s]", "Downrange [km]", "Total Fragment Mass [kg]",
-        "Temp [K]", "Datetime", "d_m [kg]", "FragmentID", "ReferenceArea [m^2]",
+        "Temp [K]", "Datetime", "d_m [kg]", "ObjectID", "FragmentID", "ReferenceArea [m^2]",
         *material_cols, *dm_material_cols
         ]]
     
@@ -916,7 +956,8 @@ def extract_metadata_and_data(filepath):
             elif 'ObjectName' in line:
                 metadata['ObjectName'] = line.split(':')[-1].strip()
             elif 'ReferenceArea' in line:
-                metadata['ReferenceArea'] = float(re.search(r"[\d\.]+", line.split(':')[-1]).group())
+                # float() also reads exponent notation such as 4.28391e-05
+                metadata['ReferenceArea'] = float(line.split(':')[-1].split('[')[0])
             elif 'trajectory history file' in line:
                 metadata['FileType'] = 'trajectory'
             elif 'aerothermal history file' in line:
@@ -974,9 +1015,7 @@ def compress_trajaerodata_dataframe(df_trajaerodata, compress_method, compress_i
         # Define fields for grouping
         grouping_fields = ['ObjectID', bin_field, 'LatBin', 'LonBin']
 
-        # Aggregation rules; d_m is summed over the bin, so the flight state that sets the air
-        # mass (altitude -> density, velocity, position, date) is averaged over the same bin.
-        # 'Time [s]' stays the bin end, the emission routines derive the bin duration from it
+        # d_m is summed per bin, the flight state is averaged and 'Time [s]' stays the bin end
         agg_dict = {
             'Time [s]': 'last',
             'Altitude [km]': 'mean',
@@ -1051,7 +1090,12 @@ def compress_trajaerodata_scarab_dataframe(df_trajaerodata, compress_method, com
     # material columns vary between scenarios/fragments, so detect them from the actual data instead of hard-coding
     material_cols = [c for c in df_copy.columns if c.endswith(' [kg]') and not c.startswith('d_m ') and c != 'Total Fragment Mass [kg]']
 
-    for fragment_id, group_df in df_copy.groupby('FragmentID'):
+    # Compress per ObjectID (break-up continuations share it, see scarab_input); older files only have FragmentID
+    object_col = 'ObjectID' if 'ObjectID' in df_copy.columns else 'FragmentID'
+    dm_check_cols = [c for c in df_copy.columns if c.startswith('d_m ')]   # 'd_m [kg]' and every 'd_m <material> [kg]'
+    dm_before = df_copy[dm_check_cols].apply(pd.to_numeric, errors='coerce').fillna(0).sum()
+
+    for object_id, group_df in df_copy.groupby(object_col):
         group_df = group_df.copy()
 
         # Set bin_field and compute it
@@ -1078,11 +1122,9 @@ def compress_trajaerodata_scarab_dataframe(df_trajaerodata, compress_method, com
         group_df = group_df.sort_values('Datetime')
 
         # Define fields for grouping
-        grouping_fields = ['FragmentID', bin_field, 'LatBin', 'LonBin']
+        grouping_fields = [object_col, bin_field, 'LatBin', 'LonBin']
 
-        # Aggregation rules; d_m is summed over the bin, so the flight state that sets the air
-        # mass (altitude -> density, velocity, position, date) is averaged over the same bin.
-        # 'Time [s]' stays the bin end, the emission routines derive the bin duration from it
+        # d_m is summed per bin, the flight state is averaged and 'Time [s]' stays the bin end
         agg_dict = {
             'Time [s]': 'last',
             'Altitude [km]': 'mean',
@@ -1094,10 +1136,12 @@ def compress_trajaerodata_scarab_dataframe(df_trajaerodata, compress_method, com
             'Temp [K]': 'last',
             'Datetime': 'mean',
             'd_m [kg]': 'sum',
+            'FragmentID': 'last',
             'ReferenceArea [m^2]': 'last',
             'scenario': 'last',
             'reentry_vehicle': 'last',
         }
+        agg_dict.pop(object_col, None)
         for col in material_cols:
             agg_dict[col] = 'last'
             agg_dict[f'd_m {col}'] = 'sum'
@@ -1130,9 +1174,16 @@ def compress_trajaerodata_scarab_dataframe(df_trajaerodata, compress_method, com
 
     # Sort by original values
     compressed = compressed.sort_values(
-        by=['FragmentID', 'Time [s]', 'Lat [deg]', 'Lon [deg]'],
+        by=[object_col, 'Time [s]', 'Lat [deg]', 'Lon [deg]'],
         ascending=[True, True, True, True]
     )
+
+    # Mass check: d_m is summed per bin and must not change
+    dm_after = compressed[dm_check_cols].apply(pd.to_numeric, errors='coerce').fillna(0).sum()
+    dm_lost = (dm_before - dm_after).abs()
+    if (dm_lost > 1e-6 * max(1.0, dm_before['d_m [kg]'])).any():
+        print(colors.BOLD + colors.RED + f"SCARAB compression: d_m changed:\n{dm_lost[dm_lost > 0]}" + colors.END)
+    print(f"SCARAB compression: {len(df_copy)} -> {len(compressed)} rows; d_m {dm_before['d_m [kg]']:.3f} kg before, {dm_after['d_m [kg]']:.3f} kg after")
 
     # Save and return
     base_name = f"{output_data_trajectory_name}{output_data_compression_name}{scenario_name}"
@@ -1262,6 +1313,10 @@ def save_emission_results(emission_results, scenario_name,calculation_method):
         
         # Saving data to csv file
         base_name = f"{output_data_emissions_name}{scenario_name}_{calculation_method}"
+        if all_scenarios == False:
+            # Single-scenario runs are usually x_ab studies, so the file name gets the factor
+            x_ab_tag = f"{x_ab:g}".replace(".", "_").replace("-", "m")
+            base_name += f"_xab_{x_ab_tag}"
         filename, file_path = get_unique_filename(base_name, output_data_folder_path_nasa_cea, ".csv")
         
         emission_results.to_csv(file_path, index=False)
@@ -1363,9 +1418,7 @@ def projected_reference_area(alpha_deg, a_side, a_axial=0.0):
     return np.abs(np.sin(alpha)) * a_side + np.abs(np.cos(alpha)) * a_axial
 
 
-# Every column a ballistic trajectory (internal generator or external CSV) can carry.
-# Anything numeric outside this list is a species column written by the NOx calculation,
-# so neither the presence nor the position of 'T_rad_equil_comb' decides the split.
+# Every column a ballistic trajectory can carry, all other numeric columns are species
 TRAJECTORY_COLUMNS_BAL = frozenset({
     # Time and position
     'Time [s]', 'MET [s]', 'date', 'Datetime', 'scenario', 'reentry_vehicle',
@@ -1421,8 +1474,7 @@ def filter_emission_data_bal(df, compress_method, compress_interval, compress_la
     # Create a copy of the DataFrame
     df_copy = df.copy()
 
-    # Species columns can carry object dtype from the emission loops; sum() would
-    # then concatenate instead of add
+    # Species columns can carry object dtype, so convert them before sum()
     for col in species_columns:
         df_copy[col] = pd.to_numeric(df_copy[col], errors="coerce")
 
@@ -1460,8 +1512,7 @@ def filter_emission_data_bal(df, compress_method, compress_interval, compress_la
     return df_filtered
 
 def smart_round(number):
-    # Round to 5 significant digits, the precision NASA CEA prints mass fractions with
-    # ('1.3443-8', '7.5178-1'), so CEA output and ambient air are compared on equal terms
+    # Round to 5 significant digits, the precision of the NASA CEA mass fractions
     number = float(number)
     if not np.isfinite(number) or number == 0.0:
         return number
@@ -1511,7 +1562,7 @@ def calculate_atmosphere_data(row):
     # Calculate total number density (sum of all molecular number densities)
     total_number_density = sum(densities.values())
 
-    # Pressure from the mixture itself (p = n * k_B * T); the old p = rho * R * T with dry-air R deviates increasingly above ~90 km (-2.5% at 100 km, -10% at 120 km)
+    # Pressure from the mixture itself (p = n * k_B * T), dry-air R deviates above ~90 km
     p_atm = total_number_density * boltzmann_constant * t_atm
 
     # Calculate molar fractions (mol/mol)
@@ -1520,7 +1571,7 @@ def calculate_atmosphere_data(row):
     # Convert molar fractions dictionary to DataFrame
     df_atm_molarfractions = pd.DataFrame([molar_fractions])
 
-    # Speed of sound from the local mixture (not dry-air kappa=1.4/R=287.058): mean molar mass and isentropic exponent follow from the NRLMSIS composition (cv = 3/2 R monatomic, 5/2 R diatomic, vibration neglected)
+    # Speed of sound from the molar mass and isentropic exponent of the local NRLMSIS mixture
     molar_mass_mix = sum(densities[s] * molar_masses[s] for s in densities) / total_number_density
     r_specific = universal_gas_constant / molar_mass_mix
     cv_over_r = sum(densities[s] * (1.5 if s in monatomic_species else 2.5)

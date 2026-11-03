@@ -5,6 +5,7 @@
 #region: #### General Config ####
 #### Imports ####
 #-------------------------------------
+import os
 import numpy as np
 
 #### Choose which Scenarios to process ####
@@ -31,8 +32,7 @@ avogadro_number = 6.02214076e23  # Molecules per mole
 universal_gas_constant = 8.314462618   # J/(mol*K)
 boltzmann_constant = 1.380649e-23      # J/K
 
-# Degrees of freedom for the isentropic exponent of the local mixture: monatomic species
-# carry cv = 3/2 R, the remaining (diatomic) ones cv = 5/2 R; vibration is neglected.
+# Monatomic species carry cv = 3/2 R, all others cv = 5/2 R (vibration neglected)
 monatomic_species = {"O", "He", "H", "Ar", "N"}
 threshold = 1e-15           # Species below this mass fraction count as zero
 molar_masses = {            # Molar masses of the atm species in kg/mol
@@ -65,10 +65,7 @@ h_max = 125000              # Upper altitude bound [m], the integration stops ab
 #-------------------------------------
 aero_schedule_basis = 'altitude'  # None = constant c_b/ldr from the scenario; 'altitude' [km] or 'time' [s]
 aero_interpolation = 'linear'   # 'linear' between the breakpoints, or 'step' to hold each value
-# The schedule alpha(x) and the tables C_D(alpha), L/D(alpha) live in their own
-# workbook; data_processing.get_aero_tables() reads and caches them. The C_D table is
-# normalised with the scenario's A_ref (c_b = mass / (C_D * A_ref)); the NOx air mass uses
-# the projected area A_ref*|sin(alpha)| + A_ref_axial*|cos(alpha)| of each step.
+# alpha schedule and C_D/L-D tables come from their own workbook, C_D is normalised with the scenario's A_ref
 file_name_aero = 'aero_data.xlsx'        # Workbook with the angle of attack aerodynamics
 sheet_name_aero_schedule = 'schedule'        # Columns: altitude_km (or time_s) and alpha_deg
 sheet_name_aero_coefficients = 'coefficients'  # Columns: alpha_deg, c_d and ldr
@@ -90,6 +87,15 @@ sigma_bal = 5.670374E-08    # W/(m^2 K^4)
 #-------------------------------------
 fragmentation_altitude = 80000          # [m] break-up altitude for GM1/GM2, written into <breakUpTriggers> of objects.xml
 fragmentation_altitude_f9 = 78600       # 78600 [m] same for F9_Tumbling/F9_Fixed, from the observed Falcon 9-435 fragmentation
+
+#### Aerothermodynamics ####
+#-------------------------------------
+heat_flux_scaling = 1.0                 # [-] PyDrama only: factor on the average heat flux of every object (1.0 = unchanged)
+reflectivity_coefficient = 1.0          # [-] PyDrama only: SARA reflectivity coefficient for solar radiation pressure
+
+#### Material Data of SARA ####
+#-------------------------------------
+drama_materials = "default"             # PyDrama only: default (materials.xml of the DRAMA installation), input_data (own copy input_data/materials.xml)
 
 #### Material Names of the DRAMA Model ####
 #-------------------------------------
@@ -156,14 +162,17 @@ Pr_turb = 0.9                       # Prandtl turbulent, for the recovery temper
 #-------------------------------------
 trace = "1.e-15"                        # CEA trace limit
 problem_material_combustion = "tp"      # tp, hp
-material_quench_temperature = None      # [K] second tp run at this temperature feeds the balance; None = off, e.g. 1500.0
 problem_hotgas_calculation = "shock"       # tp/hp: equilibrium at the perfect-gas post-shock state; shock: CEA does the jump itself
-# Temperature assigned to the oxidiser (air) reactants, t_air:
-#   "cea_stagnation"          CEA equilibrium static temperature behind the shock, isentropically brought to rest - the physically meaningful value (dissociation)
-#   "perfect_gas_stagnation"  t_atm * (1 + (kappa-1)/2 * mach_1^2), calorically perfect gas. Far higher at re-entry Mach numbers (M1=25: ~31500 K vs ~6500 K).
-# With problem_material_combustion = "tp" this does not change the species distribution; it acts
-# on the CEA retry (t_ab = max(t_mat, t_air)) and on the 7200 K species substitutions.
+# Oxidiser temperature t_air: cea_stagnation (CEA post-shock state brought to rest) or perfect_gas_stagnation
 hotgas_air_temperature = "cea_stagnation"
+
+#### Wake Config ####
+#### Only for NASA CEA, material combustion ####
+#-------------------------------------
+material_wake_temperature = None    # [K] tp run of the combustion products at this temperature feeds the balance; None = off, e.g. 1500.0
+hotgas_wake = False                 # False: products only; True: products (fuel) mixed with hot gas (oxid) at o/f = wake_rof
+wake_rof = 2                        # [-] hot gas per kg of combustion products in the wake run, only for hotgas_wake = True
+material_wake_pressure = "p_2"      # pressure of the wake run: p_stag (as combustion), p_2 (static post-shock), p_atm (ambient)
 
 #### Cantera Config ####
 #-------------------------------------
@@ -178,10 +187,7 @@ shock_state = "inc_eq"              # Station used for the balance: inc_eq, inc_
 shock_ions = False                  # Include ionised species (e-, NO+, N+, O+, ...)
 shock_debug = False                 # CEA flag 'deb': write every iteration to the .out file
 shock_mach_min = 1.05               # Below this free-stream Mach number CEA computes no shock solution
-# How the free-stream state is handed to CEA's shock problem:
-#   "u1"     velocity [m/s] - CEA derives the speed of sound from the reactant mixture
-#            itself, so the local NRLMSIS composition is used, no external kappa/R needed
-#   "mach1"  Mach number from calculate_atmosphere_data()'s speed of sound
+# Free-stream input for the CEA shock problem: u1 (velocity, CEA derives the speed of sound) or mach1
 shock_input = "u1"
 #endregion
 
@@ -189,7 +195,8 @@ shock_input = "u1"
 #### Folders ####
 #-------------------------------------
 input_data_folder_path = 'input_data/'
-scarab_output_folder_path = '../SCARAB_path/'   # SCARAB result folders, one per scenario named like 'reentry_vehicle'
+# SCARAB result folders, one per scenario named like 'reentry_vehicle', relative to the project folder
+scarab_output_folder_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '..', 'SCARAB_path', '')
 output_data_folder_path_trajectory = 'output_data/trajectory'
 output_data_folder_path_nasa_cea = 'output_data/emissions'
 output_data_folder_path_excel = 'output_data/data_raw/excel/'
@@ -210,6 +217,7 @@ file_name_emission_factors = 'emission_factors.xlsx'
 sheet_name_emission_factors = 'Emission_Factors'
 
 file_name_scenarios = 'scenarios.xlsx'
+file_name_scenarios = os.environ.get("REAT_SCENARIO_FILE", file_name_scenarios)  # optional override by environment variable
 sheet_name_scenarios = 'scenarios'
 
 file_name_material_data = 'material_data.xlsx'
